@@ -12,6 +12,7 @@ import (
 
 	"github.com/XferOps/contextor/internal/api"
 	"github.com/XferOps/contextor/internal/db"
+	"github.com/XferOps/contextor/internal/embeddings"
 )
 
 func main() {
@@ -29,7 +30,13 @@ func main() {
 		defer pool.Close()
 	}
 
-	router := api.NewRouter(pool)
+	embed, err := embeddings.NewClient()
+	if err != nil {
+		log.Printf("Warning: embeddings client init failed: %v", err)
+		embed = nil
+	}
+
+	router := api.NewRouter(pool, embed)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", port),
