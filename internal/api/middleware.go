@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/XferOps/contextor/internal/auth"
+	"github.com/XferOps/winnow/internal/auth"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

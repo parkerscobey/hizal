@@ -1,10 +1,10 @@
-# Contextor
+# Winnow
 
 A context management platform for AI coding agents. Helps agents operate in the "smart zone" (efficient context usage) rather than the "dumb zone" (context overwhelm causing degraded performance).
 
-## Why Contextor?
+## Why Winnow?
 
-AI coding tools struggle in large codebases not because models are incapable, but because context is poorly managed. Contextor solves this by:
+AI coding tools struggle in large codebases not because models are incapable, but because context is poorly managed. Winnow solves this by:
 
 1. **Context compounds** — Each task makes future tasks easier
 2. **Avoids the dumb zone** — Compaction prevents context overwhelm

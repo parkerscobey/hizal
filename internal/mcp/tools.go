@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/XferOps/contextor/internal/embeddings"
+	"github.com/XferOps/winnow/internal/embeddings"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 )

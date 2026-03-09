@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/XferOps/contextor/internal/embeddings"
-	"github.com/XferOps/contextor/internal/mcp"
+	"github.com/XferOps/winnow/internal/embeddings"
+	"github.com/XferOps/winnow/internal/mcp"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"

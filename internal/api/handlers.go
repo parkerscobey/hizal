@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/XferOps/contextor/internal/auth"
-	"github.com/XferOps/contextor/internal/mcp"
+	"github.com/XferOps/winnow/internal/auth"
+	"github.com/XferOps/winnow/internal/mcp"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

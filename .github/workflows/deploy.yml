@@ -7,10 +7,10 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPO: 498228255317.dkr.ecr.us-east-1.amazonaws.com/contextor-api
-  ECS_CLUSTER: contextor-cluster
-  ECS_SERVICE: contextor-api
-  TASK_FAMILY: contextor-api
+  ECR_REPO: 498228255317.dkr.ecr.us-east-1.amazonaws.com/winnow-api
+  ECS_CLUSTER: winnow-cluster
+  ECS_SERVICE: winnow-api
+  TASK_FAMILY: winnow-api
 
 jobs:
   build-and-deploy:

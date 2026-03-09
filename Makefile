@@ -26,5 +26,5 @@ migrate-down:
 	migrate -path $(MIGRATIONS) -database "$(DATABASE_URL)" down 1
 
 docker-build:
-	docker build -t contextor:latest .
-	@echo "✅ Docker image built: contextor:latest"
+	docker build -t winnow:latest .
+	@echo "✅ Docker image built: winnow:latest"

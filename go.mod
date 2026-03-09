@@ -1,4 +1,4 @@
-module github.com/XferOps/contextor
+module github.com/XferOps/winnow
 
 go 1.23
 
