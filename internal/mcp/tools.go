@@ -294,7 +294,8 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	results := []ChunkResult{}
 	for rows.Next() {
 		var (
-			id, queryKey, title, sourceFile string
+			id, queryKey, title string
+			sourceFile          *string
 			contentB, sourceLinesB, gotchasB, relatedB []byte
 			score                                       float64
 			createdAt, updatedAt                        time.Time
@@ -302,12 +303,16 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 		if err := rows.Scan(&id, &queryKey, &title, &contentB, &sourceFile, &sourceLinesB, &gotchasB, &relatedB, &score, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
+		sf := ""
+		if sourceFile != nil {
+			sf = *sourceFile
+		}
 		results = append(results, ChunkResult{
 			ID:          id,
 			QueryKey:    queryKey,
 			Title:       title,
 			Content:     decodeContent(contentB),
-			SourceFile:  sourceFile,
+			SourceFile:  sf,
 			SourceLines: decodeSourceLines(sourceLinesB),
 			Gotchas:     decodeStringSlice(gotchasB),
 			Related:     decodeStringSlice(relatedB),
