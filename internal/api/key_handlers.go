@@ -60,8 +60,8 @@ func (h *KeyHandlers) CreateKey(w http.ResponseWriter, r *http.Request) {
 
 	var keyID string
 	err = h.pool.QueryRow(r.Context(), `
-		INSERT INTO api_keys (user_id, key_hash, name, scope_all_projects, allowed_project_ids)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO api_keys (owner_type, user_id, key_hash, name, scope_all_projects, allowed_project_ids)
+		VALUES ('USER', $1, $2, $3, $4, $5)
 		RETURNING id
 	`, user.ID, keyHash, body.Name, body.ScopeAll, projectIDs).Scan(&keyID)
 	if err != nil {

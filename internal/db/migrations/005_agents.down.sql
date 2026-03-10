@@ -1,0 +1,6 @@
+ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_owner_check;
+ALTER TABLE api_keys ALTER COLUMN user_id SET NOT NULL;
+ALTER TABLE api_keys DROP COLUMN IF EXISTS agent_id;
+ALTER TABLE api_keys DROP COLUMN IF EXISTS owner_type;
+DROP TABLE IF EXISTS agent_projects;
+DROP TABLE IF EXISTS agents;

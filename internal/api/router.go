@@ -37,6 +37,8 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	orgH := NewOrgHandlers(pool)
 	projH := NewProjectHandlers(pool)
 	projMemberH := NewProjectMembershipHandlers(pool)
+	agentH := NewAgentHandlers(pool)
+	agentKeyH := NewAgentKeyHandlers(pool)
 	keyH := NewKeyHandlers(pool)
 
 	// ── Auth routes (no auth required for register/login) ──────────────────
@@ -87,6 +89,19 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Patch("/v1/projects/{id}/members/{userId}", projMemberH.UpdateMemberRole)
 		r.Delete("/v1/projects/{id}/members/{userId}", projMemberH.RemoveMember)
 
+		// Agents
+		r.Post("/v1/orgs/{id}/agents", agentH.CreateAgent)
+		r.Get("/v1/orgs/{id}/agents", agentH.ListAgents)
+		r.Get("/v1/agents/{id}", agentH.GetAgent)
+		r.Patch("/v1/agents/{id}", agentH.UpdateAgent)
+		r.Delete("/v1/agents/{id}", agentH.DeleteAgent)
+		r.Post("/v1/agents/{id}/projects", agentH.AddProject)
+		r.Delete("/v1/agents/{id}/projects/{projectId}", agentH.RemoveProject)
+
+		// Agent keys
+		r.Post("/v1/agents/{id}/keys", agentKeyH.CreateAgentKey)
+		r.Get("/v1/agents/{id}/keys", agentKeyH.ListAgentKeys)
+		r.Delete("/v1/agents/{id}/keys/{keyId}", agentKeyH.DeleteAgentKey)
 		// API keys
 		r.Get("/v1/keys", keyH.ListKeys)
 		r.Delete("/v1/keys/{id}", keyH.DeleteKey)
