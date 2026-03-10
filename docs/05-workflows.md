@@ -1,12 +1,12 @@
-# Contextor: Workflows
+# Winnow: Workflows
 
 ## RPI Workflow Overview
 
-Dex Horthy's Research → Plan → Implement workflow, mapped to Contextor tools:
+Dex Horthy's Research → Plan → Implement workflow, mapped to Winnow tools:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    RPI Workflow with Contextor                  │
+│                    RPI Workflow with Winnow                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐                │
@@ -18,7 +18,7 @@ Dex Horthy's Research → Plan → Implement workflow, mapped to Contextor tools
 │   read_context      (plan as         read_context               │
 │   write_context       context)                                  │
 │                                                                 │
-│   contextor-         contextor-       contextor-                │
+│   winnow-         winnow-       winnow-                │
 │   research           plan             onboard (if handoff)      │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -336,7 +336,7 @@ On user feedback (user-directed):
 ## File Structure
 
 ```
-contextor/
+winnow/
 ├── docs/
 │   ├── 01-problem-sources.md    # Problem, Dex talk, original MCP
 │   ├── 02-architecture.md       # System design, components

@@ -270,19 +270,19 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	if in.QueryKey != "" {
 		rows, err = pool(t).Query(ctx, `
 			SELECT id, query_key, title, content, source_file, source_lines, gotchas, related,
-			       1 - (embedding <=> $1) AS score, created_at, updated_at
+			       COALESCE(1 - (embedding <=> $1), 0) AS score, created_at, updated_at
 			FROM context_chunks
 			WHERE project_id = $2 AND query_key = $3
-			ORDER BY embedding <=> $1
+			ORDER BY (embedding IS NULL), embedding <=> $1
 			LIMIT $4
 		`, vec, projectID, in.QueryKey, limit)
 	} else {
 		rows, err = pool(t).Query(ctx, `
 			SELECT id, query_key, title, content, source_file, source_lines, gotchas, related,
-			       1 - (embedding <=> $1) AS score, created_at, updated_at
+			       COALESCE(1 - (embedding <=> $1), 0) AS score, created_at, updated_at
 			FROM context_chunks
 			WHERE project_id = $2
-			ORDER BY embedding <=> $1
+			ORDER BY (embedding IS NULL), embedding <=> $1
 			LIMIT $3
 		`, vec, projectID, limit)
 	}
@@ -544,10 +544,10 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 
 	rows, err := pool(t).Query(ctx, `
 		SELECT id, query_key, title, content, source_file, source_lines, gotchas, related,
-		       1 - (embedding <=> $1) AS score, created_at, updated_at
+		       COALESCE(1 - (embedding <=> $1), 0) AS score, created_at, updated_at
 		FROM context_chunks
 		WHERE project_id = $2
-		ORDER BY embedding <=> $1
+		ORDER BY (embedding IS NULL), embedding <=> $1
 		LIMIT $3
 	`, vec, projectID, limit)
 	if err != nil {

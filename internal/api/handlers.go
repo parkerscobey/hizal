@@ -194,7 +194,7 @@ func (h *Handlers) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get or create bot user for this org
-	botEmail := "agent-" + body.OrgSlug + "@contextor.local"
+	botEmail := "agent-" + body.OrgSlug + "@winnow.local"
 	var userID string
 	err = h.pool.QueryRow(ctx, `
 		INSERT INTO users (email, name) VALUES ($1, $2)

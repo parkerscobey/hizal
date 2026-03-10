@@ -1,8 +1,8 @@
-# Contextor: Problem Statement & Research Sources
+# Winnow: Problem Statement & Research Sources
 
 ## Executive Summary
 
-Contextor is a context management platform for AI coding agents. It helps agents operate in the "smart zone" (efficient context usage) rather than the "dumb zone" (context overwhelm causing degraded performance).
+Winnow is a context management platform for AI coding agents. It helps agents operate in the "smart zone" (efficient context usage) rather than the "dumb zone" (context overwhelm causing degraded performance).
 
 ## Problem Statement
 
@@ -43,7 +43,7 @@ AI coding tools perform poorly in large, complex ("brownfield") codebases becaus
 
 **Key Concepts Adopted:**
 
-| Concept | Description | Contextor Alignment |
+| Concept | Description | Winnow Alignment |
 |---------|-------------|---------------------|
 | Context Engineering | Actively managing what info is in the context window | Core to design |
 | Dumb Zone | Context >40% causes performance degradation | Drives compaction feature |
@@ -86,7 +86,7 @@ AI coding tools perform poorly in large, complex ("brownfield") codebases becaus
 | Quality tracking (add_doc_review) | Humans can't easily read raw context |
 | Write capability (write_doc) | No human UI equivalent |
 
-**Gap Contextor fills:**
+**Gap Winnow fills:**
 - Structured context chunks (not flat markdown)
 - Context compaction (summarize and reset)
 - Human-readable UI for viewing context

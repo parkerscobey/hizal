@@ -1,10 +1,10 @@
-# Contextor: Architecture
+# Winnow: Architecture
 
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Contextor Platform                      │
+│                         Winnow Platform                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐    │
@@ -257,7 +257,7 @@ Agent writes compacted summary back via write_context()
 ### Option A: SaaS (Managed)
 
 ```
-api.contextor.io   ──▶  Your hosted Postgres
+api.winnow.io   ──▶  Your hosted Postgres
          │
          └── MCP runs on our servers
 ```
@@ -275,7 +275,7 @@ api.contextor.io   ──▶  Your hosted Postgres
 
 ```
 Customer runs:
-  - contextor-api (container)
+  - winnow-api (container)
   - PostgreSQL (existing or new)
 
 MCP connects via HTTP

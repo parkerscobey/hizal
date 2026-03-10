@@ -1,4 +1,4 @@
-# Contextor: Skills Specification
+# Winnow: Skills Specification
 
 ## Overview
 
@@ -6,7 +6,7 @@ Skills guide agents through structured workflows, preventing the "dumb zone" and
 
 ---
 
-## Skill: contextor-research
+## Skill: winnow-research
 
 **Purpose:** Guide agents to efficiently gather and create context before planning
 
@@ -112,7 +112,7 @@ Task: "Add password reset functionality"
 
 ---
 
-## Skill: contextor-compact
+## Skill: winnow-compact
 
 **Purpose:** Compress context before continuing work or ending a session
 
@@ -187,7 +187,7 @@ Agent has been working for 20 minutes on auth refactoring.
 
 ---
 
-## Skill: contextor-onboard
+## Skill: winnow-onboard
 
 **Purpose:** Quickly get a new agent up to speed on a codebase area
 
@@ -240,7 +240,7 @@ New agent starting work on payments.
 
 ---
 
-## Skill: contextor-plan
+## Skill: winnow-plan
 
 **Purpose:** Create implementation plans that can be reviewed and executed reliably
 
@@ -291,7 +291,7 @@ A good plan is compression of intent. Even weaker models can execute good plans 
 ###}
 ---
 
-## Skill: contextor-review
+## Skill: winnow-review
 
 **Purpose:** Validate and improve context quality through structured reviews
 
