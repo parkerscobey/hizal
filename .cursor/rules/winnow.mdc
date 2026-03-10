@@ -1,0 +1,106 @@
+---
+description: Rules for using Winnow (context management API) in this codebase
+globs: ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.md"]
+---
+
+# Winnow Context Management Rules
+
+## What is Winnow?
+Winnow is a semantic context store for AI agents. It stores, searches, and versions knowledge chunks using vector embeddings.
+
+## MCP Configuration
+```json
+{
+  "mcpServers": {
+    "winnow": {
+      "url": "https://winnow-api.xferops.dev/mcp",
+      "headers": { "Authorization": "Bearer dk_live_YOUR_KEY_HERE" }
+    }
+  }
+}
+```
+
+## Core Tools
+
+| Tool | Purpose |
+|------|---------|
+| `search_context` | Semantic search — always run this first |
+| `read_context` | Fetch a chunk by ID |
+| `write_context` | Store a new chunk with embedding |
+| `update_context` | Update a chunk (creates new version) |
+| `get_context_versions` | View version history of a chunk |
+| `compact_context` | Bulk-fetch chunks for summarization |
+| `review_context` | Rate a chunk's quality (1-5) |
+| `delete_context` | Remove a chunk |
+
+## Coding Conventions
+
+### API Key Format
+```
+dk_live_{org}_{random}   — production
+dk_test_{org}_{random}   — testing
+```
+Never hardcode. Use `WINNOW_API_KEY` env var.
+
+### Go API Pattern
+```go
+result, err := client.SearchContext(ctx, &winnow.SearchRequest{
+    ProjectID: cfg.ProjectID,
+    Query:     "search query",
+    Limit:     10,
+})
+```
+
+### REST Endpoints
+```
+POST   /api/context              — write_context
+GET    /api/context/:id          — read_context
+PUT    /api/context/:id          — update_context
+DELETE /api/context/:id          — delete_context
+GET    /api/context/:id/versions — get_context_versions
+POST   /api/context/search       — search_context
+POST   /api/context/compact      — compact_context
+POST   /api/context/:id/review   — review_context
+```
+
+## Workflow Rules
+
+### Before writing new context
+1. ALWAYS `search_context` first
+2. If relevant chunk exists, `update_context` instead of creating duplicate
+3. One concept per chunk
+
+### Tagging conventions
+```
+["research", "<topic>"]              — research findings
+["plan", "<feature>", "<milestone>"] — plans
+["decision", "<area>"]               — architectural decisions
+["onboarding", "overview"]           — overview docs
+["compacted", "<topic>"]             — merged chunks
+["convention", "<area>"]             — coding standards
+```
+
+### Chunk quality
+- Size: 100–600 words
+- Tags: minimum 2
+- Source: always include URL or file path when available
+
+## Workflow Shortcuts
+
+### Research a topic
+```
+search_context → read top results → gather new info → write_context
+```
+
+### Start a task
+```
+search_context(topic) → search_context(conventions) → plan → write_context(plan)
+```
+
+### End of session
+```
+write_context(session summary, tags=["session", date, feature])
+```
+
+## Testing
+Use `dk_test_*` keys. Never use production keys in tests.
