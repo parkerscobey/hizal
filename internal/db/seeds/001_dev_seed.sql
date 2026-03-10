@@ -9,6 +9,12 @@
 -- chunk #1: 44444444-4444-4444-4444-444444444444
 -- chunk #2: 55555555-5555-5555-5555-555555555555
 --
+-- Demo local JWT login:
+--   email:    agent@acme.dev
+--   password: localdev123
+-- Stored password hash (bcrypt):
+--   $2y$10$w54oge2PmHYmaEF9S8PGAe/Rydp4/gbb./wuIRfXxs4Hfx5effFiu
+--
 -- Demo plaintext API key for local auth:
 --   ctx_acme-dev_demo-local-key
 -- Stored hash (SHA-256 hex):
@@ -22,11 +28,17 @@ SET name = EXCLUDED.name,
     tier = EXCLUDED.tier,
     updated_at = NOW();
 
-INSERT INTO users (id, email, name)
-VALUES ('22222222-2222-2222-2222-222222222222', 'agent@acme.dev', 'Acme Agent')
+INSERT INTO users (id, email, name, password_hash)
+VALUES (
+  '22222222-2222-2222-2222-222222222222',
+  'agent@acme.dev',
+  'Acme Agent',
+  '$2y$10$w54oge2PmHYmaEF9S8PGAe/Rydp4/gbb./wuIRfXxs4Hfx5effFiu'
+)
 ON CONFLICT (id) DO UPDATE
 SET email = EXCLUDED.email,
     name = EXCLUDED.name,
+    password_hash = EXCLUDED.password_hash,
     updated_at = NOW();
 
 INSERT INTO org_memberships (user_id, org_id, role)
@@ -89,11 +101,11 @@ VALUES
   '44444444-4444-4444-4444-444444444444',
   '33333333-3333-3333-3333-333333333333',
   'auth.middleware',
-  'API key auth behavior',
-  '{"text":"Auth uses Bearer token, validates against api_keys.key_hash, and attaches org/project scope context."}'::jsonb,
-  'internal/api/middleware.go',
-  '{"start": 27, "end": 90}'::jsonb,
-  '["Requests fail with 401 when Bearer prefix is missing."]'::jsonb,
+  'Local auth flow behavior',
+  '{"text":"Local testing supports password login at /v1/auth/login for seeded users and Bearer API key auth for context/MCP routes. API keys belong to users and can be scoped to selected projects."}'::jsonb,
+  'internal/api/auth_handlers.go',
+  '{"start": 19, "end": 160}'::jsonb,
+  '["JWT routes and API key routes are separate; use the JWT to manage orgs, projects, and keys, then use the API key for MCP and context APIs."]'::jsonb,
   '[]'::jsonb,
   'codex-seed'
 ),
@@ -142,7 +154,7 @@ INSERT INTO context_versions (chunk_id, version, content, change_note)
 SELECT
   '44444444-4444-4444-4444-444444444444',
   1,
-  '{"text":"Auth uses Bearer token, validates against api_keys.key_hash, and attaches org/project scope context."}'::jsonb,
+  '{"text":"Local testing supports password login at /v1/auth/login for seeded users and Bearer API key auth for context/MCP routes. API keys belong to users and can be scoped to selected projects."}'::jsonb,
   'seed: initial snapshot'
 WHERE NOT EXISTS (
   SELECT 1
@@ -169,9 +181,9 @@ SELECT
   '44444444-4444-4444-4444-444444444444',
   'Validate auth flow in local API tests',
   5,
-  'Clearly explains where authorization checks happen.',
+  'Clearly explains how seeded JWT and API key auth fit together.',
   5,
-  'Matches current middleware implementation.',
+  'Matches the current auth handlers and API key middleware split.',
   'keep'
 WHERE NOT EXISTS (
   SELECT 1

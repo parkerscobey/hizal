@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -83,9 +84,11 @@ func (h *ProjectHandlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 	var projects []projectItem
 	for rows.Next() {
 		var p projectItem
-		if err := rows.Scan(&p.ID, &p.OrgID, &p.Name, &p.Slug, &p.CreatedAt); err != nil {
+		var createdAt time.Time
+		if err := rows.Scan(&p.ID, &p.OrgID, &p.Name, &p.Slug, &createdAt); err != nil {
 			continue
 		}
+		p.CreatedAt = createdAt.Format(time.RFC3339)
 		projects = append(projects, p)
 	}
 	if projects == nil {

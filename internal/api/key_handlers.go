@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/XferOps/winnow/internal/auth"
 	"github.com/go-chi/chi/v5"
@@ -107,11 +108,16 @@ func (h *KeyHandlers) ListKeys(w http.ResponseWriter, r *http.Request) {
 	var keys []keyItem
 	for rows.Next() {
 		var k keyItem
-		var lastUsed *string
-		if err := rows.Scan(&k.ID, &k.Name, &k.ScopeAll, &k.ProjectIDs, &k.CreatedAt, &lastUsed); err != nil {
+		var createdAt time.Time
+		var lastUsed *time.Time
+		if err := rows.Scan(&k.ID, &k.Name, &k.ScopeAll, &k.ProjectIDs, &createdAt, &lastUsed); err != nil {
 			continue
 		}
-		k.LastUsedAt = lastUsed
+		k.CreatedAt = createdAt.Format(time.RFC3339)
+		if lastUsed != nil {
+			formatted := lastUsed.Format(time.RFC3339)
+			k.LastUsedAt = &formatted
+		}
 		keys = append(keys, k)
 	}
 	if keys == nil {
