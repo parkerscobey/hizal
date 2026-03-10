@@ -36,6 +36,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	authH := NewAuthHandlers(pool)
 	orgH := NewOrgHandlers(pool)
 	projH := NewProjectHandlers(pool)
+	projMemberH := NewProjectMembershipHandlers(pool)
 	keyH := NewKeyHandlers(pool)
 
 	// ── Auth routes (no auth required for register/login) ──────────────────
@@ -79,6 +80,12 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Post("/v1/orgs/{id}/projects", projH.CreateProject)
 		r.Get("/v1/orgs/{id}/projects", projH.ListProjects)
 		r.Patch("/v1/projects/{id}", projH.UpdateProject)
+
+		// Project memberships
+		r.Post("/v1/projects/{id}/members", projMemberH.AddMember)
+		r.Get("/v1/projects/{id}/members", projMemberH.ListMembers)
+		r.Patch("/v1/projects/{id}/members/{userId}", projMemberH.UpdateMemberRole)
+		r.Delete("/v1/projects/{id}/members/{userId}", projMemberH.RemoveMember)
 
 		// API keys
 		r.Get("/v1/keys", keyH.ListKeys)
