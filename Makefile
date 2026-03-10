@@ -28,3 +28,9 @@ migrate-down:
 docker-build:
 	docker build -t winnow:latest .
 	@echo "✅ Docker image built: winnow:latest"
+
+reset: migrate-down migrate-up seed
+	@echo "Database reset complete"
+
+clean: reset
+	@echo "Run 'docker compose down -v' to remove volumes"
