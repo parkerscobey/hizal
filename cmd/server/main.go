@@ -28,6 +28,9 @@ func main() {
 	}
 	if pool != nil {
 		defer pool.Close()
+		if err := db.RunMigrations(context.Background(), pool); err != nil {
+			log.Fatalf("Failed to run migrations: %v", err)
+		}
 	}
 
 	embed, err := embeddings.NewClient()
