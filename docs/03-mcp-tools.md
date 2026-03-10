@@ -1,12 +1,12 @@
-# Contextor: MCP Tools Specification
+# Winnow: MCP Tools Specification
 
 ## Overview
 
-Contextor exposes MCP tools to agents for context management. Inspired by the original development MCP, but with key differences.
+Winnow exposes MCP tools to agents for context management. Inspired by the original development MCP, but with key differences.
 
 ### Comparison to The Original Development MCP
 
-| The Original MCP | Contextor |
+| The Original MCP | Winnow |
 |-----------------|-----------|
 | `search_docs` | `search_context` (semantic, grouped by query_key, includes recency) |
 | `read_file` | `read_context` (structured chunks, with version history) |
@@ -19,7 +19,7 @@ Contextor exposes MCP tools to agents for context management. Inspired by the or
 ### Key Differences
 
 1. **Structured context chunks** — Not flat markdown; includes gotchas, related keys, source references
-2. **Context compaction** — Unique to Contextor; prevents the "dumb zone"
+2. **Context compaction** — Unique to Winnow; prevents the "dumb zone"
 3. **Review system** — Tracks quality, feeds back into improving context
 4. **Persistent storage** — Context survives sessions, compounds over time
 

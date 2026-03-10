@@ -53,7 +53,7 @@ type ProjectMembership struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
-// APIKey represents an API key for accessing the Contextor API.
+// APIKey represents an API key for accessing the Winnow API.
 type APIKey struct {
 	ID                 string     `json:"id" db:"id"`
 	UserID             string     `json:"user_id" db:"user_id"`

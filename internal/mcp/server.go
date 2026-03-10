@@ -198,7 +198,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.Result = map[string]interface{}{
 			"protocolVersion": "2024-11-05",
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
-			"serverInfo":      map[string]interface{}{"name": "contextor", "version": "0.1.0"},
+			"serverInfo":      map[string]interface{}{"name": "winnow", "version": "0.1.0"},
 		}
 
 	case "tools/list":

@@ -47,7 +47,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Contextor server starting on port %s", port)
+		log.Printf("Winnow server starting on port %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
