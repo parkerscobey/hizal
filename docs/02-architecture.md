@@ -271,28 +271,6 @@ api.winnow.io   ──▶  Your hosted Postgres
 
 ---
 
-### Option B: Self-Hosted (Future)
-
-```
-Customer runs:
-  - winnow-api (container)
-  - PostgreSQL (existing or new)
-
-MCP connects via HTTP
-```
-
-**Pros:**
-- Data stays local
-- Enterprise requirement for data sovereignty
-
-**Control & Profitability:**
-- **License key required** — Valid license key needed to run
-- License key tied to org tier (from pricing model)
-- No valid key = 14-day trial, then stops
-- Renewal codes sold via our website
-
-**This maintains control while allowing self-hosting for enterprises.**
-
 ---
 
 ## Security Model

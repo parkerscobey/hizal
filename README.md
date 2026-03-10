@@ -129,21 +129,7 @@ GET    /health                # health check
 |-----|---------|
 | [`docs/api-reference.md`](./docs/api-reference.md) | Full REST API with request/response examples |
 | [`docs/mcp-guide.md`](./docs/mcp-guide.md) | MCP connection guide + all tool schemas |
-| [`docs/self-hosting.md`](./docs/self-hosting.md) | Docker Compose local dev setup |
 | [`docs/workflows.md`](./docs/workflows.md) | Example agent workflows |
-
----
-
-## Self-Hosting
-
-Run Winnow locally in 2 commands:
-
-```bash
-cp .env.example .env   # fill in OPENAI_API_KEY
-docker compose up
-```
-
-→ Full guide: [`docs/self-hosting.md`](./docs/self-hosting.md)
 
 ---
 

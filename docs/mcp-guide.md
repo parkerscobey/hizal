@@ -63,23 +63,6 @@ Edit `~/.mcporter/mcporter.json`:
 }
 ```
 
-### Self-Hosted
-
-Replace the URL with your local instance:
-
-```json
-{
-  "mcpServers": {
-    "winnow": {
-      "url": "http://localhost:8080/mcp",
-      "headers": {
-        "Authorization": "Bearer ctx_your-org_YOUR_KEY_HERE"
-      }
-    }
-  }
-}
-```
-
 ---
 
 ## Tools Reference
