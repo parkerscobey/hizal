@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -128,9 +129,11 @@ func (h *OrgHandlers) ListOrgs(w http.ResponseWriter, r *http.Request) {
 	var orgs []orgItem
 	for rows.Next() {
 		var o orgItem
-		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Tier, &o.CreatedAt, &o.Role); err != nil {
+		var createdAt time.Time
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Tier, &createdAt, &o.Role); err != nil {
 			continue
 		}
+		o.CreatedAt = createdAt.Format(time.RFC3339)
 		orgs = append(orgs, o)
 	}
 	if orgs == nil {
@@ -193,9 +196,11 @@ func (h *OrgHandlers) GetOrg(w http.ResponseWriter, r *http.Request) {
 	var members []member
 	for rows.Next() {
 		var m member
-		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.JoinedAt); err != nil {
+		var joinedAt time.Time
+		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Role, &joinedAt); err != nil {
 			continue
 		}
+		m.JoinedAt = joinedAt.Format(time.RFC3339)
 		members = append(members, m)
 	}
 	if members == nil {
