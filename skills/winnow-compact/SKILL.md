@@ -1,74 +1,36 @@
-# SKILL: winnow-compact
+---
+name: winnow-compact
+description: Compact overlapping Winnow context by gathering related chunks, producing a higher-signal summary, writing it back, and superseding or deleting redundant chunks carefully.
+---
 
-## Description
-Compaction workflow for Winnow. Fetches multiple related context chunks, summarizes them into a single high-quality chunk, writes the summary back, and optionally removes or supersedes the originals. Keeps the knowledge base clean and token-efficient.
+# Winnow Compact
+
+Use this skill when Winnow has too many overlapping or low-signal chunks on the same topic.
+
+Use it for requests like:
+- "Compact the context for X"
+- "Merge the research on X"
+- "Clean up noisy Winnow chunks"
 
 ## Setup
-Same as `winnow-research` — Winnow MCP server must be configured with a valid API key and project ID.
 
-## Usage
-Invoke this skill when:
-- A topic has many small or outdated chunks that should be merged
-- Context retrieval is returning noisy/redundant results
-- Preparing a project snapshot or milestone summary
-- Token budget is a concern and you need denser context
+Expect a Winnow MCP server to be configured with:
+- `Authorization: Bearer <api-key>`
 
-**Trigger phrases:**
-- "Compact the Winnow context for X"
-- "Summarize and clean up chunks about X"
-- "Merge the research chunks on X"
+Resolve the `project_id` explicitly for all project-scoped MCP calls.
 
 ## Workflow
 
-### Step 1 — Identify chunks to compact
-Search for all chunks related to the topic:
-```
-search_context(query="<topic>", projectId="<project_id>", limit=20)
-```
-Review results. Select chunks that are:
-- Overlapping or redundant
-- Older versions superseded by newer work
-- Too small to be useful independently
-
-### Step 2 — Fetch full content
-Retrieve the complete content of each selected chunk:
-```
-compact_context(ids=["<id1>", "<id2>", ...], projectId="<project_id>")
-```
-This returns all chunks in one call, optimized for summarization.
-
-### Step 3 — Summarize
-Synthesize all fetched content into a single, comprehensive summary:
-- Preserve all important facts, decisions, and references
-- Remove repetition, outdated info, and noise
-- Structure clearly with headers if the content is long
-
-### Step 4 — Write the summary chunk
-```
-write_context(
-  projectId="<project_id>",
-  content="<summary>",
-  tags=["compacted", "<topic>"],
-  source="compacted from: <list of original IDs>"
-)
-```
-
-### Step 5 — Version or delete originals
-For each original chunk, either:
-- **Update** with a deprecation note pointing to the new chunk:
-  ```
-  update_context(id="<old_id>", content="[SUPERSEDED] See chunk <new_id>")
-  ```
-- Or **delete** if they're fully captured in the summary:
-  ```
-  delete_context(id="<old_id>", projectId="<project_id>")
-  ```
-
-### Step 6 — Report
-Return a summary of what was compacted, how many chunks were merged, and the new chunk ID.
+1. Identify related chunks with `search_context(query="<topic>", project_id="<project_id>", limit=20)`.
+2. Read the candidates before changing anything.
+3. Fetch the selected material with `compact_context(ids=[...], project_id="<project_id>")`.
+4. Produce one clear summary that preserves important facts, decisions, and references.
+5. Write the summary with `write_context`.
+6. Supersede or delete originals only after confirming the new chunk fully covers them.
+7. Report what was merged and the new chunk ID.
 
 ## Notes
-- Never delete chunks without reading them first
-- Keep the `source` field traceable — list original IDs
-- Run compaction periodically (e.g., after a sprint) to prevent context bloat
-- Tag compacted chunks with `"compacted"` for easy identification
+
+- Never delete unread chunks.
+- Preserve traceability by referencing the original chunk IDs.
+- Prefer updating stale chunks with a superseded note over deleting them when history matters.

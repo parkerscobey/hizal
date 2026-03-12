@@ -1,75 +1,46 @@
-# SKILL: winnow-onboard
+---
+name: winnow-onboard
+description: Onboard to a project with Winnow by listing projects, selecting the right project_id, searching for architecture and status context, and summarizing the current mental model.
+---
 
-## Description
-Onboarding workflow for new agents or team members joining a project. Searches the Winnow knowledge base to build a mental model of the project — architecture, decisions, conventions, and current status — without needing to read every source file.
+# Winnow Onboard
+
+Use this skill when the user wants a fast project orientation before coding.
+
+Use it for requests like:
+- "Onboard me to this project"
+- "Get me up to speed"
+- "What is the current state of this system?"
 
 ## Setup
-Same as `winnow-research` — Winnow MCP server must be configured with a valid API key and project ID.
 
-## Usage
-Invoke this skill when:
-- A new agent session starts on an unfamiliar project
-- A new team member needs to get up to speed
-- Resuming a project after a long break
-- Doing a context reset / fresh perspective
+Expect a Winnow MCP server to be configured with:
+- `Authorization: Bearer <api-key>`
 
-**Trigger phrases:**
-- "Onboard me to project X"
-- "What's the current state of X?"
-- "Get me up to speed on X"
-- "Load context for X"
+Do not assume the active project. Start by discovering or confirming the correct `project_id`.
 
 ## Workflow
 
-### Step 1 — Search for overview chunks
-Start with high-level queries to find architectural and decision context:
-```
-search_context(query="project overview architecture", projectId="<project_id>", limit=5)
-search_context(query="design decisions conventions", projectId="<project_id>", limit=5)
-search_context(query="current status roadmap", projectId="<project_id>", limit=5)
-```
-
-### Step 2 — Read key chunks in full
-For each high-relevance result, read the full chunk:
-```
-read_context(id="<chunk_id>")
-```
-Prioritize chunks tagged: `overview`, `architecture`, `decision`, `convention`, `status`
-
-### Step 3 — Explore domain areas
-Search for the major functional areas of the project:
-```
-search_context(query="<feature area>", projectId="<project_id>", limit=3)
-```
-Repeat for each key area identified in step 1.
-
-### Step 4 — Check version history on critical chunks
-For any chunk that seems foundational, check if it's been updated:
-```
-get_context_versions(id="<chunk_id>")
-```
-Use the most recent version.
-
-### Step 5 — Build mental model
-Synthesize into a structured summary covering:
-- **What the project is** — purpose, scope, current state
-- **Architecture** — key components, data flow, tech stack
-- **Conventions** — naming, patterns, style decisions
-- **Open questions / known gaps** — what's still in flux
-- **Where to start** — most relevant areas for the current task
-
-### Step 6 — Write the mental model back (optional)
-If this onboarding session produced new synthesis, save it:
-```
-write_context(
-  projectId="<project_id>",
-  content="<mental model summary>",
-  tags=["onboarding", "overview", "<date>"]
-)
-```
+1. Discover the target project.
+   - Call `list_projects` if the project is not explicit.
+   - Use the project name and description to choose the correct `project_id`.
+2. Search for high-level context first.
+   - `search_context(query="project overview architecture", project_id="<project_id>", limit=5)`
+   - `search_context(query="design decisions conventions", project_id="<project_id>", limit=5)`
+   - `search_context(query="current status roadmap", project_id="<project_id>", limit=5)`
+3. Read the most relevant chunks in full with `read_context`.
+4. Expand into the major feature or domain areas you discover.
+5. Check `get_context_versions` for foundational chunks if freshness matters.
+6. Return a concise mental model covering:
+   - project purpose and current state
+   - major architecture and data flow
+   - conventions and constraints
+   - open questions or gaps
+   - where to start for the user’s task
+7. If you create a useful synthesis that does not already exist, write it back with `write_context`.
 
 ## Notes
-- This skill is read-heavy — writing is optional and only if synthesis adds new value
-- Focus on `tags` and `source` when scanning results to prioritize relevance
-- If Winnow has sparse context, fall back to reading README, docs/, and git log
-- For recurring sessions: search for chunks tagged with the current sprint or milestone
+
+- Prefer existing Winnow context before reading large portions of the repo.
+- Use `project_id` on MCP tool calls instead of relying on connection-level project headers.
+- If Winnow context is sparse, fall back to repo docs, README files, and targeted code search.

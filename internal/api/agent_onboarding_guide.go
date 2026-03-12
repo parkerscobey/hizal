@@ -86,24 +86,28 @@ Project scoping matters:
 
 ## MCP Setup
 
-Codex CLI config.toml format:
-
-    [mcp_servers.winnow]
-    url = "https://winnow-api.xferops.dev/mcp"
-    http_headers = { Authorization = "Bearer <agent-api-key>" }
-
 JSON MCP client format:
 
-    {
-      "mcpServers": {
-        "winnow": {
-          "url": "https://winnow-api.xferops.dev/mcp",
-          "headers": {
-            "Authorization": "Bearer <agent-api-key>"
-          }
-        }
+` + "```json" + `
+{
+  "mcpServers": {
+    "winnow": {
+      "url": "https://winnow-api.xferops.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer <agent-api-key>"
       }
     }
+  }
+}
+` + "```" + `
+
+Codex CLI config.toml format:
+
+` + "```toml" + `
+[mcp_servers.winnow]
+url = "https://winnow-api.xferops.dev/mcp"
+http_headers = { Authorization = "Bearer <agent-api-key>" }
+` + "```" + `
 
 ## How To Onboard A New Agent
 

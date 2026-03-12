@@ -1,76 +1,38 @@
-# SKILL: winnow-research
+---
+name: winnow-research
+description: Research a topic with Winnow by checking existing context first, reading the relevant chunks, filling gaps from the repo or web, and writing back a focused summary.
+---
 
-## Description
-Research workflow using Winnow for AI agents. Searches existing context, explores related chunks, and writes new findings back into the Winnow knowledge base. Prevents re-researching topics that are already documented.
+# Winnow Research
+
+Use this skill when the user wants research, discovery, or background gathering tied to Winnow.
+
+Use it for requests like:
+- "Research X"
+- "What do we know about X?"
+- "Look into X and save the findings"
 
 ## Setup
-**Prerequisites:**
-- Winnow MCP server configured with your API key and project ID
-- MCP config (`~/.cursor/mcp.json` or OpenClaw MCP config):
 
-```json
-{
-  "mcpServers": {
-    "winnow": {
-      "url": "https://winnow-api.xferops.dev/mcp",
-      "headers": { "Authorization": "Bearer dk_live_YOUR_KEY_HERE" }
-    }
-  }
-}
-```
+Expect a Winnow MCP server to be configured with:
+- `Authorization: Bearer <api-key>`
 
-**Required env / config:**
-- `WINNOW_API_KEY` — your Winnow API key (`dk_live_{org}_{random}`)
-- `WINNOW_PROJECT_ID` — the project UUID to read/write context into
-
-## Usage
-Invoke this skill when:
-- Starting research on a new topic or feature
-- Exploring an unfamiliar codebase area
-- Gathering information before writing code, docs, or designs
-
-**Trigger phrases:**
-- "Research X for me"
-- "What do we know about X?"
-- "Look into X and save what you find"
+Choose the target `project_id` explicitly. If the project is unclear, call `list_projects` first.
 
 ## Workflow
 
-### Step 1 — Search existing context
-Before fetching anything new, search Winnow to avoid duplication:
-```
-search_context(query="<topic>", projectId="<project_id>", limit=5)
-```
-Read the top results. If the answer is already there and recent, return it directly.
-
-### Step 2 — Explore related chunks
-For each relevant result, fetch the full chunk to get more depth:
-```
-read_context(id="<chunk_id>")
-```
-Follow any referenced IDs or topics to build a complete picture.
-
-### Step 3 — External research (if needed)
-If existing context is insufficient, gather new information:
-- Web search, documentation, codebase grep, etc.
-- Synthesize findings into a clear, factual summary
-
-### Step 4 — Write findings back
-Store new/updated knowledge in Winnow:
-```
-write_context(
-  projectId="<project_id>",
-  content="<synthesized findings>",
-  tags=["research", "<topic>"],
-  source="<url or file path>"
-)
-```
-
-### Step 5 — Return to user
-Summarize what was found (existing + new). Include Winnow chunk IDs for traceability.
+1. Resolve the project with `list_projects` when needed.
+2. Search Winnow before doing new work.
+   - `search_context(query="<topic>", project_id="<project_id>", limit=5)`
+3. Read the top matches with `read_context`.
+4. If the answer is already present and recent, use it directly.
+5. If context is incomplete, gather the missing facts from the codebase, docs, or the web.
+6. Write back a focused synthesis with `write_context`.
+7. Return the answer with the relevant chunk IDs when useful.
 
 ## Notes
-- Always search before writing — avoid duplicate chunks
-- Use descriptive tags: `["research", "auth", "v0.1"]`
-- Keep chunks focused (one concept per chunk, ~200-500 words)
-- Include `source` field whenever possible for auditability
+
+- Avoid writing duplicate chunks.
+- Keep chunks narrow and factual.
+- Include a source path or URL when you add new information.
+- Use `project_id` on MCP tool calls instead of connection-level project headers.
