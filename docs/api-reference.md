@@ -33,7 +33,7 @@ Health check. No auth required.
 ```json
 {
   "status": "ok",
-  "version": "0.1.0"
+  "version": "0.2.1"
 }
 ```
 
@@ -68,6 +68,7 @@ Return dynamic onboarding data for an API-key-authenticated agent.
 This endpoint is intended for agents and CLI usage. It returns:
 
 - Long-form onboarding guidance in `guide_markdown`
+- Links to agent workflow skills in `skills`
 - Projects available to the current API key
 - Whether the caller still needs to choose a project
 - Suggested initial search queries and tool usage guidance
@@ -88,7 +89,7 @@ Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
 ```json
 {
   "application": "winnow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "guide_markdown": "# Winnow Agent Onboarding Guide\n...",
   "key": {
     "id": "key_123",
@@ -113,6 +114,16 @@ Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
   "default_project_id": "project_123",
   "selected_project_id": null,
   "needs_project_selection": false,
+  "skills": [
+    {
+      "id": "winnow-onboard",
+      "title": "Winnow Onboard",
+      "description": "Onboard to a project with Winnow by selecting project scope and reading high-signal context first.",
+      "purpose": "Fast project orientation before coding.",
+      "format": "markdown",
+      "url": "/api/v1/skills/winnow-onboard"
+    }
+  ],
   "available_projects": [
     {
       "id": "project_123",
@@ -196,10 +207,37 @@ Authorization: Bearer <jwt>
 
 Returns the same payload shape as `GET /api/v1/agent-onboarding`.
 
+Skill links in this JWT-authenticated response use agent-scoped URLs like `/api/v1/agents/:id/skills/winnow-onboard`.
+
 **Notes:**
 
 - Access is limited to users who can access the target agent.
 - This is the recommended endpoint for rendering a human-readable onboarding page in the UI.
+
+### `GET /api/v1/skills/:id`
+
+Return a served skill document for API-key-authenticated agents.
+
+**Auth:**
+```http
+Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
+```
+
+**Response 200:**
+```json
+{
+  "id": "winnow-onboard",
+  "title": "Winnow Onboard",
+  "description": "Onboard to a project with Winnow by selecting project scope and reading high-signal context first.",
+  "purpose": "Fast project orientation before coding.",
+  "format": "markdown",
+  "markdown": "---\nname: winnow-onboard\n..."
+}
+```
+
+### `GET /api/v1/agents/:id/skills/:skillId`
+
+Return the same skill document for a specific agent, but authenticated as a human user via JWT.
 
 ---
 

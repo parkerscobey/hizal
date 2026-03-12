@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	r := chi.NewRouter()
@@ -42,6 +42,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	agentH := NewAgentHandlers(pool)
 	agentKeyH := NewAgentKeyHandlers(pool)
 	agentOnboardingH := NewAgentOnboardingHandlers(pool)
+	skillH := NewSkillHandlers(pool)
 	keyH := NewKeyHandlers(pool)
 
 	// ── Auth routes (no auth required for register/login) ──────────────────
@@ -104,6 +105,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Get("/v1/orgs/{id}/agents", agentH.ListAgents)
 		r.Get("/v1/agents/{id}", agentH.GetAgent)
 		r.Get("/api/v1/agents/{id}/onboarding", agentOnboardingH.GetForAgent)
+		r.Get("/api/v1/agents/{id}/skills/{skillId}", skillH.GetForAgent)
 		r.Patch("/v1/agents/{id}", agentH.UpdateAgent)
 		r.Delete("/v1/agents/{id}", agentH.DeleteAgent)
 		r.Post("/v1/agents/{id}/projects", agentH.AddProject)
@@ -152,6 +154,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 
 	// Dynamic agent onboarding endpoint (requires API key auth)
 	r.With(APIKeyAuth(pool)).Get("/api/v1/agent-onboarding", agentOnboardingH.Get)
+	r.With(APIKeyAuth(pool)).Get("/api/v1/skills/{id}", skillH.Get)
 
 	// Usage analytics endpoint (requires auth, scoped to org)
 	r.With(APIKeyAuth(pool)).Get("/v1/usage", func(w http.ResponseWriter, r *http.Request) {

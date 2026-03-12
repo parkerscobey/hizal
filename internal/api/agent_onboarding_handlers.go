@@ -67,7 +67,7 @@ func (h *AgentOnboardingHandlers) buildProjects(r *http.Request, key models.APIK
 	return projects, nil
 }
 
-func (h *AgentOnboardingHandlers) buildResponse(key models.APIKey, org models.Org, agentName, agentSlug, ownerName *string, projects []onboardingProject, selectedProjectID string) map[string]interface{} {
+func (h *AgentOnboardingHandlers) buildResponse(key models.APIKey, org models.Org, agentName, agentSlug, ownerName *string, projects []onboardingProject, selectedProjectID string, agentScopedSkills bool) map[string]interface{} {
 	var defaultProjectID *string
 	if len(projects) == 1 {
 		defaultProjectID = &projects[0].ID
@@ -136,6 +136,7 @@ func (h *AgentOnboardingHandlers) buildResponse(key models.APIKey, org models.Or
 		"mcp_endpoint":              "/mcp",
 		"context_api_base":          "/v1/context",
 		"recommended_start_queries": startQueries,
+		"skills":                    listSkillSummaries(key.AgentID, agentScopedSkills),
 		"tooling": map[string]interface{}{
 			"implemented_tools": []string{
 				"list_projects",
@@ -225,7 +226,7 @@ func (h *AgentOnboardingHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.buildResponse(key, org, agentName, agentSlug, ownerName, projects, claims.ProjectID))
+	writeJSON(w, http.StatusOK, h.buildResponse(key, org, agentName, agentSlug, ownerName, projects, claims.ProjectID, false))
 }
 
 // GET /api/v1/agents/{id}/onboarding
@@ -276,5 +277,5 @@ func (h *AgentOnboardingHandlers) GetForAgent(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.buildResponse(key, org, &agent.Name, &agent.Slug, &owner.Name, projects, selectedProjectID))
+	writeJSON(w, http.StatusOK, h.buildResponse(key, org, &agent.Name, &agent.Slug, &owner.Name, projects, selectedProjectID, true))
 }

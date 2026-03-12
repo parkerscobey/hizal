@@ -250,7 +250,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.Result = map[string]interface{}{
 			"protocolVersion": version,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
-			"serverInfo":      map[string]interface{}{"name": "winnow", "version": "0.1.0"},
+			"serverInfo":      map[string]interface{}{"name": "winnow", "version": "0.2.1"},
 		}
 
 	case "ping":
