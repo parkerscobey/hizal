@@ -10,6 +10,7 @@ const (
 	corsAllowHeaders     = "Authorization, Content-Type, X-Project-ID"
 	corsAllowMethods     = "GET, POST, PATCH, DELETE, OPTIONS"
 	corsAllowCredentials = "true"
+	defaultAppBaseURL    = "https://winnow.xferops.dev"
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -44,14 +45,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 func resolveAllowedOrigins() []string {
 	raw := strings.TrimSpace(os.Getenv("CORS_ALLOW_ORIGINS"))
 	if raw != "" {
-		parts := strings.Split(raw, ",")
-		out := make([]string, 0, len(parts))
-		for _, p := range parts {
-			v := strings.TrimSpace(p)
-			if v != "" {
-				out = append(out, v)
-			}
-		}
+		out := splitCSV(raw)
 		if len(out) > 0 {
 			return out
 		}
@@ -62,7 +56,11 @@ func resolveAllowedOrigins() []string {
 		return []string{"http://localhost:5173", "http://127.0.0.1:5173"}
 	}
 
-	return nil
+	if appBaseURL := strings.TrimSpace(os.Getenv("APP_BASE_URL")); appBaseURL != "" {
+		return splitCSV(appBaseURL)
+	}
+
+	return []string{defaultAppBaseURL}
 }
 
 func isAllowedOrigin(origin string, allowed []string) bool {
@@ -72,4 +70,16 @@ func isAllowedOrigin(origin string, allowed []string) bool {
 		}
 	}
 	return false
+}
+
+func splitCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		v := strings.TrimSpace(p)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
