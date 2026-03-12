@@ -61,6 +61,146 @@ Create a new API key. No auth required (bootstrap endpoint).
 
 ---
 
+### `GET /api/v1/agent-onboarding`
+
+Return dynamic onboarding data for an API-key-authenticated agent.
+
+This endpoint is intended for agents and CLI usage. It returns:
+
+- Long-form onboarding guidance in `guide_markdown`
+- Projects available to the current API key
+- Whether the caller still needs to choose a project
+- Suggested initial search queries and tool usage guidance
+
+**Auth:**
+```http
+Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
+```
+
+**Headers:**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | ✅ | API key bearer token |
+| `X-Project-ID` | — | Optional. If provided, echoed back as `selected_project_id` |
+
+**Response 200:**
+```json
+{
+  "application": "winnow",
+  "version": "0.2.0",
+  "guide_markdown": "# Winnow Agent Onboarding Guide\n...",
+  "key": {
+    "id": "key_123",
+    "name": "agent key",
+    "owner_type": "AGENT",
+    "scope_all_projects": false
+  },
+  "org": {
+    "id": "org_123",
+    "name": "Acme",
+    "slug": "acme"
+  },
+  "agent": {
+    "id": "agent_123",
+    "name": "Code Agent",
+    "slug": "code-agent"
+  },
+  "owner": {
+    "user_id": "user_123",
+    "name": "Agent Owner"
+  },
+  "default_project_id": "project_123",
+  "selected_project_id": null,
+  "needs_project_selection": false,
+  "available_projects": [
+    {
+      "id": "project_123",
+      "name": "API",
+      "slug": "api",
+      "selected": false
+    }
+  ],
+  "mcp_endpoint": "/mcp",
+  "context_api_base": "/v1/context",
+  "recommended_start_queries": [
+    "project overview architecture",
+    "authentication authorization",
+    "data model migrations",
+    "deployment environment configuration",
+    "recent changes roadmap"
+  ],
+  "tooling": {
+    "implemented_tools": [
+      "search_context",
+      "read_context",
+      "write_context",
+      "update_context",
+      "get_context_versions",
+      "compact_context",
+      "review_context",
+      "delete_context"
+    ],
+    "required_headers": [
+      "Authorization: Bearer <api-key>",
+      "X-Project-ID: <project-id>"
+    ]
+  },
+  "instructions": [
+    "Use Winnow before exploring the codebase directly.",
+    "Choose one project from available_projects and send X-Project-ID on subsequent MCP or context requests."
+  ],
+  "chunk_shape": {
+    "required": ["query_key", "title", "content"],
+    "optional": ["source_file", "source_lines", "gotchas", "related"]
+  }
+}
+```
+
+**Notes:**
+
+- Call this endpoint without `X-Project-ID` if the agent first needs to discover available projects.
+- If the key can access multiple projects, `needs_project_selection` will be `true` until the agent chooses one.
+- Subsequent MCP and context requests should include `X-Project-ID`.
+
+---
+
+### `GET /api/v1/agents/:id/onboarding`
+
+Return the same onboarding payload for a specific agent, but authenticated as a human user via JWT.
+
+This endpoint is intended for the UI application and other user-authenticated tooling.
+
+**Auth:**
+```http
+Authorization: Bearer <jwt>
+```
+
+**Path params:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | ✅ | Agent ID |
+
+**Headers / query params:**
+
+| Name | Required | Description |
+|------|----------|-------------|
+| `Authorization` | ✅ | JWT bearer token |
+| `X-Project-ID` | — | Optional selected project |
+| `project_id` | — | Optional selected project as query param |
+
+**Response 200:**
+
+Returns the same payload shape as `GET /api/v1/agent-onboarding`.
+
+**Notes:**
+
+- Access is limited to users who can access the target agent.
+- This is the recommended endpoint for rendering a human-readable onboarding page in the UI.
+
+---
+
 ### `POST /v1/context`
 
 Write a new context chunk.

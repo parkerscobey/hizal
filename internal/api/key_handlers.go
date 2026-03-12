@@ -53,7 +53,14 @@ func (h *KeyHandlers) CreateKey(w http.ResponseWriter, r *http.Request) {
 		projectIDs = []string{}
 	}
 
-	plaintext, keyHash, err := auth.GenerateAPIKey(body.Name)
+	var org models.Org
+	err := h.pool.QueryRow(r.Context(), `SELECT id, slug FROM orgs WHERE id = $1`, body.OrgID).Scan(&org.ID, &org.Slug)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "failed to resolve org slug")
+		return
+	}
+
+	plaintext, keyHash, err := auth.GenerateAPIKey(org.Slug)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "KEYGEN_FAILED", err.Error())
 		return

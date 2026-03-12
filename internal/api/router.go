@@ -41,6 +41,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	projMemberH := NewProjectMembershipHandlers(pool)
 	agentH := NewAgentHandlers(pool)
 	agentKeyH := NewAgentKeyHandlers(pool)
+	agentOnboardingH := NewAgentOnboardingHandlers(pool)
 	keyH := NewKeyHandlers(pool)
 
 	// ── Auth routes (no auth required for register/login) ──────────────────
@@ -102,6 +103,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Post("/v1/orgs/{id}/agents", agentH.CreateAgent)
 		r.Get("/v1/orgs/{id}/agents", agentH.ListAgents)
 		r.Get("/v1/agents/{id}", agentH.GetAgent)
+		r.Get("/api/v1/agents/{id}/onboarding", agentOnboardingH.GetForAgent)
 		r.Patch("/v1/agents/{id}", agentH.UpdateAgent)
 		r.Delete("/v1/agents/{id}", agentH.DeleteAgent)
 		r.Post("/v1/agents/{id}/projects", agentH.AddProject)
@@ -130,6 +132,9 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		}
 		mcpServer.ServeHTTP(w, r)
 	})
+
+	// Dynamic agent onboarding endpoint (requires API key auth)
+	r.With(APIKeyAuth(pool)).Get("/api/v1/agent-onboarding", agentOnboardingH.Get)
 
 	// Usage analytics endpoint (requires auth, scoped to org)
 	r.With(APIKeyAuth(pool)).Get("/v1/usage", func(w http.ResponseWriter, r *http.Request) {

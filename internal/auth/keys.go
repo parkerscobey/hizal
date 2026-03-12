@@ -6,7 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"regexp"
+	"strings"
 )
+
+var keyPrefixSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
 
 // GenerateAPIKey generates a new API key for an org.
 // Returns (plaintext, sha256hex) — the hash is stored in the DB.
@@ -18,7 +22,7 @@ func GenerateAPIKey(orgSlug string) (plaintext, hash string, err error) {
 		return "", "", fmt.Errorf("failed to generate key bytes: %w", err)
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(raw)
-	plaintext = fmt.Sprintf("ctx_%s_%s", orgSlug, encoded)
+	plaintext = fmt.Sprintf("ctx_%s_%s", normalizeKeyPrefix(orgSlug), encoded)
 	hash = sha256Hex(plaintext)
 	return plaintext, hash, nil
 }
@@ -31,4 +35,14 @@ func HashKey(plaintext string) string {
 func sha256Hex(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
+}
+
+func normalizeKeyPrefix(s string) string {
+	normalized := strings.ToLower(strings.TrimSpace(s))
+	normalized = keyPrefixSanitizer.ReplaceAllString(normalized, "-")
+	normalized = strings.Trim(normalized, "-")
+	if normalized == "" {
+		return "key"
+	}
+	return normalized
 }
