@@ -38,13 +38,13 @@ func (h *AgentKeyHandlers) CreateAgentKey(w http.ResponseWriter, r *http.Request
 	// Resolve agent's org_id for denormalized storage on the key row.
 	var agent models.Agent
 	if err := h.pool.QueryRow(r.Context(),
-		`SELECT id, org_id FROM agents WHERE id = $1`, agentID,
-	).Scan(&agent.ID, &agent.OrgID); err != nil {
+		`SELECT id, org_id, slug FROM agents WHERE id = $1`, agentID,
+	).Scan(&agent.ID, &agent.OrgID, &agent.Slug); err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "failed to resolve agent org")
 		return
 	}
 
-	plaintext, keyHash, err := auth.GenerateAPIKey(body.Name)
+	plaintext, keyHash, err := auth.GenerateAPIKey(agent.Slug)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "KEYGEN_FAILED", err.Error())
 		return

@@ -129,6 +129,7 @@ GET    /health                # health check
 |-----|---------|
 | [`docs/api-reference.md`](./docs/api-reference.md) | Full REST API with request/response examples |
 | [`docs/mcp-guide.md`](./docs/mcp-guide.md) | MCP connection guide + all tool schemas |
+| [`docs/06-agent-onboarding.md`](./docs/06-agent-onboarding.md) | How to onboard a Winnow-connected agent to this application |
 | [`docs/workflows.md`](./docs/workflows.md) | Example agent workflows |
 
 ---
