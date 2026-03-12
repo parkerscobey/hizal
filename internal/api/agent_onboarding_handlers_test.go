@@ -95,7 +95,13 @@ func TestAgentOnboardingEndpointReturnsAgentProjects(t *testing.T) {
 		DefaultProjectID      *string `json:"default_project_id"`
 		SelectedProjectID     *string `json:"selected_project_id"`
 		NeedsProjectSelection bool    `json:"needs_project_selection"`
-		AvailableProjects     []struct {
+		Skills                []struct {
+			ID     string `json:"id"`
+			Title  string `json:"title"`
+			Format string `json:"format"`
+			URL    string `json:"url"`
+		} `json:"skills"`
+		AvailableProjects []struct {
 			ID          string  `json:"id"`
 			Name        string  `json:"name"`
 			Slug        string  `json:"slug"`
@@ -132,6 +138,32 @@ func TestAgentOnboardingEndpointReturnsAgentProjects(t *testing.T) {
 	}
 	if body.AvailableProjects[0].Description == nil || *body.AvailableProjects[0].Description != projectDescription {
 		t.Fatalf("available_projects[0].description = %v, want %q", body.AvailableProjects[0].Description, projectDescription)
+	}
+	if len(body.Skills) != 5 {
+		t.Fatalf("len(skills) = %d, want 5", len(body.Skills))
+	}
+	expectedSkillURLs := map[string]string{
+		"winnow-compact":  "/api/v1/skills/winnow-compact",
+		"winnow-onboard":  "/api/v1/skills/winnow-onboard",
+		"winnow-plan":     "/api/v1/skills/winnow-plan",
+		"winnow-research": "/api/v1/skills/winnow-research",
+		"winnow-review":   "/api/v1/skills/winnow-review",
+	}
+	for _, skill := range body.Skills {
+		expectedURL, ok := expectedSkillURLs[skill.ID]
+		if !ok {
+			t.Fatalf("unexpected skill id %q", skill.ID)
+		}
+		if skill.URL != expectedURL {
+			t.Fatalf("skill %q url = %q, want %q", skill.ID, skill.URL, expectedURL)
+		}
+		if skill.Format != "markdown" {
+			t.Fatalf("skill %q format = %q, want markdown", skill.ID, skill.Format)
+		}
+		delete(expectedSkillURLs, skill.ID)
+	}
+	if len(expectedSkillURLs) != 0 {
+		t.Fatalf("missing skills from response: %v", expectedSkillURLs)
 	}
 	if len(body.Tooling.RequiredHeaders) != 1 || body.Tooling.RequiredHeaders[0] != "Authorization: Bearer <api-key>" {
 		t.Fatalf("required_headers = %v, want only Authorization", body.Tooling.RequiredHeaders)
@@ -228,6 +260,10 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 			Name *string `json:"name"`
 			Slug *string `json:"slug"`
 		} `json:"agent"`
+		Skills []struct {
+			ID  string `json:"id"`
+			URL string `json:"url"`
+		} `json:"skills"`
 		AvailableProjects []struct {
 			ID          string  `json:"id"`
 			Description *string `json:"description"`
@@ -255,7 +291,62 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 	if len(body.AvailableProjects) != 1 || body.AvailableProjects[0].ID != projectID || body.AvailableProjects[0].Selected {
 		t.Fatalf("available_projects = %+v, want one unselected default project", body.AvailableProjects)
 	}
+	if len(body.Skills) != 5 {
+		t.Fatalf("len(skills) = %d, want 5", len(body.Skills))
+	}
+	expectedAgentSkillURLs := map[string]string{
+		"winnow-compact":  "/api/v1/agents/" + agentID + "/skills/winnow-compact",
+		"winnow-onboard":  "/api/v1/agents/" + agentID + "/skills/winnow-onboard",
+		"winnow-plan":     "/api/v1/agents/" + agentID + "/skills/winnow-plan",
+		"winnow-research": "/api/v1/agents/" + agentID + "/skills/winnow-research",
+		"winnow-review":   "/api/v1/agents/" + agentID + "/skills/winnow-review",
+	}
+	for _, skill := range body.Skills {
+		expectedURL, ok := expectedAgentSkillURLs[skill.ID]
+		if !ok {
+			t.Fatalf("unexpected skill id %q", skill.ID)
+		}
+		if skill.URL != expectedURL {
+			t.Fatalf("skill %q url = %q, want %q", skill.ID, skill.URL, expectedURL)
+		}
+		delete(expectedAgentSkillURLs, skill.ID)
+	}
+	if len(expectedAgentSkillURLs) != 0 {
+		t.Fatalf("missing skills from response: %v", expectedAgentSkillURLs)
+	}
 	if body.AvailableProjects[0].Description == nil || *body.AvailableProjects[0].Description != projectDescription {
 		t.Fatalf("available_projects[0].description = %v, want %q", body.AvailableProjects[0].Description, projectDescription)
+	}
+}
+
+func TestSkillEndpointReturnsMarkdown(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/winnow-onboard", nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", "winnow-onboard")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rr := httptest.NewRecorder()
+	NewSkillHandlers(nil).Get(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var body struct {
+		ID       string `json:"id"`
+		Format   string `json:"format"`
+		Markdown string `json:"markdown"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.ID != "winnow-onboard" {
+		t.Fatalf("id = %q, want winnow-onboard", body.ID)
+	}
+	if body.Format != "markdown" {
+		t.Fatalf("format = %q, want markdown", body.Format)
+	}
+	if !strings.Contains(body.Markdown, "# Winnow Onboard") {
+		t.Fatalf("markdown missing expected heading")
 	}
 }
