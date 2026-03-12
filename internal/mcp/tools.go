@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/XferOps/winnow/internal/embeddings"
+	"github.com/XferOps/winnow/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 )
@@ -269,20 +270,24 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	var rows pgxRows
 	if in.QueryKey != "" {
 		rows, err = pool(t).Query(ctx, `
-			SELECT id, query_key, title, content, source_file, source_lines, gotchas, related,
-			       COALESCE(1 - (embedding <=> $1), 0) AS score, created_at, updated_at
-			FROM context_chunks
-			WHERE project_id = $2 AND query_key = $3
-			ORDER BY (embedding IS NULL), embedding <=> $1
+			SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+			       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
+			       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
+			       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
+			FROM context_chunks cc
+			WHERE cc.project_id = $2 AND cc.query_key = $3
+			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
 			LIMIT $4
 		`, vec, projectID, in.QueryKey, limit)
 	} else {
 		rows, err = pool(t).Query(ctx, `
-			SELECT id, query_key, title, content, source_file, source_lines, gotchas, related,
-			       COALESCE(1 - (embedding <=> $1), 0) AS score, created_at, updated_at
-			FROM context_chunks
-			WHERE project_id = $2
-			ORDER BY (embedding IS NULL), embedding <=> $1
+			SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+			       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
+			       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
+			       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
+			FROM context_chunks cc
+			WHERE cc.project_id = $2
+			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
 			LIMIT $3
 		`, vec, projectID, limit)
 	}
@@ -293,33 +298,11 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 
 	results := []ChunkResult{}
 	for rows.Next() {
-		var (
-			id, queryKey, title string
-			sourceFile          *string
-			contentB, sourceLinesB, gotchasB, relatedB []byte
-			score                                       float64
-			createdAt, updatedAt                        time.Time
-		)
-		if err := rows.Scan(&id, &queryKey, &title, &contentB, &sourceFile, &sourceLinesB, &gotchasB, &relatedB, &score, &createdAt, &updatedAt); err != nil {
+		chunk, version, score, err := scanChunkResultRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		sf := ""
-		if sourceFile != nil {
-			sf = *sourceFile
-		}
-		results = append(results, ChunkResult{
-			ID:          id,
-			QueryKey:    queryKey,
-			Title:       title,
-			Content:     decodeContent(contentB),
-			SourceFile:  sf,
-			SourceLines: decodeSourceLines(sourceLinesB),
-			Gotchas:     decodeStringSlice(gotchasB),
-			Related:     decodeStringSlice(relatedB),
-			Score:       score,
-			CreatedAt:   createdAt,
-			UpdatedAt:   updatedAt,
-		})
+		results = append(results, chunkResultFromModel(chunk, version, score))
 	}
 	return &SearchContextResult{Results: results}, nil
 }
@@ -329,33 +312,23 @@ func (t *Tools) ReadContext(ctx context.Context, projectID, id string) (*ReadCon
 		return nil, fmt.Errorf("project_id is required")
 	}
 	row := pool(t).QueryRow(ctx, `
-		SELECT id, query_key, title, content, source_file, source_lines, gotchas, related, created_at, updated_at
-		FROM context_chunks
-		WHERE id = $1 AND project_id = $2
+		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
+		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
+		FROM context_chunks cc
+		WHERE cc.id = $1 AND cc.project_id = $2
 	`, id, projectID)
 
-	var (
-		cid, queryKey, title string
-		sourceFile           *string
-		contentB, sourceLinesB, gotchasB, relatedB []byte
-		createdAt, updatedAt time.Time
-	)
-	if err := row.Scan(&cid, &queryKey, &title, &contentB, &sourceFile, &sourceLinesB, &gotchasB, &relatedB, &createdAt, &updatedAt); err != nil {
+	chunk, currentVersion, err := scanChunkRow(row)
+	if err != nil {
 		return nil, fmt.Errorf("chunk not found: %w", err)
 	}
-	sf := ""
-	if sourceFile != nil {
-		sf = *sourceFile
-	}
-
-	// Fetch version count for current version
-	currentVersion, _ := getVersion(ctx, pool(t), cid)
 
 	// Fetch versions
 	vrows, err := pool(t).Query(ctx, `
 		SELECT version, change_note, created_at FROM context_versions
 		WHERE chunk_id = $1 ORDER BY version DESC
-	`, cid)
+	`, chunk.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -371,20 +344,8 @@ func (t *Tools) ReadContext(ctx context.Context, projectID, id string) (*ReadCon
 	}
 
 	return &ReadContextResult{
-		ChunkResult: ChunkResult{
-			ID:          cid,
-			QueryKey:    queryKey,
-			Title:       title,
-			Content:     decodeContent(contentB),
-			SourceFile:  sf,
-			SourceLines: decodeSourceLines(sourceLinesB),
-			Gotchas:     decodeStringSlice(gotchasB),
-			Related:     decodeStringSlice(relatedB),
-			Version:     currentVersion,
-			CreatedAt:   createdAt,
-			UpdatedAt:   updatedAt,
-		},
-		Versions: versions,
+		ChunkResult: chunkResultFromModel(chunk, currentVersion, 0),
+		Versions:    versions,
 	}, nil
 }
 
@@ -543,11 +504,13 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 	vec := pgvector.NewVector(emb)
 
 	rows, err := pool(t).Query(ctx, `
-		SELECT id, query_key, title, content, source_file, source_lines, gotchas, related,
-		       COALESCE(1 - (embedding <=> $1), 0) AS score, created_at, updated_at
-		FROM context_chunks
-		WHERE project_id = $2
-		ORDER BY (embedding IS NULL), embedding <=> $1
+		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
+		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
+		       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
+		FROM context_chunks cc
+		WHERE cc.project_id = $2
+		ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
 		LIMIT $3
 	`, vec, projectID, limit)
 	if err != nil {
@@ -557,33 +520,11 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 
 	chunks := []ChunkResult{}
 	for rows.Next() {
-		var (
-			id, queryKey, title string
-			sourceFile          *string
-			contentB, sourceLinesB, gotchasB, relatedB []byte
-			score                                       float64
-			createdAt, updatedAt                        time.Time
-		)
-		if err := rows.Scan(&id, &queryKey, &title, &contentB, &sourceFile, &sourceLinesB, &gotchasB, &relatedB, &score, &createdAt, &updatedAt); err != nil {
+		chunk, version, score, err := scanChunkResultRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		csf := ""
-		if sourceFile != nil {
-			csf = *sourceFile
-		}
-		chunks = append(chunks, ChunkResult{
-			ID:          id,
-			QueryKey:    queryKey,
-			Title:       title,
-			Content:     decodeContent(contentB),
-			SourceFile:  csf,
-			SourceLines: decodeSourceLines(sourceLinesB),
-			Gotchas:     decodeStringSlice(gotchasB),
-			Related:     decodeStringSlice(relatedB),
-			Score:       score,
-			CreatedAt:   createdAt,
-			UpdatedAt:   updatedAt,
-		})
+		chunks = append(chunks, chunkResultFromModel(chunk, version, score))
 	}
 	return &CompactContextResult{Chunks: chunks, Total: len(chunks)}, nil
 }
@@ -666,4 +607,76 @@ type pgxRows interface {
 	Scan(dest ...interface{}) error
 	Close()
 	Err() error
+}
+
+type pgxScanner interface {
+	Scan(dest ...interface{}) error
+}
+
+func scanChunkRow(row pgxScanner) (models.ContextChunk, int, error) {
+	var chunk models.ContextChunk
+	var version int
+	err := row.Scan(
+		&chunk.ID,
+		&chunk.ProjectID,
+		&chunk.QueryKey,
+		&chunk.Title,
+		&chunk.Content,
+		&chunk.Embedding,
+		&chunk.SourceFile,
+		&chunk.SourceLines,
+		&chunk.Gotchas,
+		&chunk.Related,
+		&chunk.CreatedByAgent,
+		&chunk.CreatedAt,
+		&chunk.UpdatedAt,
+		&version,
+	)
+	return chunk, version, err
+}
+
+func scanChunkResultRow(row pgxScanner) (models.ContextChunk, int, float64, error) {
+	var chunk models.ContextChunk
+	var version int
+	var score float64
+	err := row.Scan(
+		&chunk.ID,
+		&chunk.ProjectID,
+		&chunk.QueryKey,
+		&chunk.Title,
+		&chunk.Content,
+		&chunk.Embedding,
+		&chunk.SourceFile,
+		&chunk.SourceLines,
+		&chunk.Gotchas,
+		&chunk.Related,
+		&chunk.CreatedByAgent,
+		&chunk.CreatedAt,
+		&chunk.UpdatedAt,
+		&version,
+		&score,
+	)
+	return chunk, version, score, err
+}
+
+func chunkResultFromModel(chunk models.ContextChunk, version int, score float64) ChunkResult {
+	sourceFile := ""
+	if chunk.SourceFile != nil {
+		sourceFile = *chunk.SourceFile
+	}
+
+	return ChunkResult{
+		ID:          chunk.ID,
+		QueryKey:    chunk.QueryKey,
+		Title:       chunk.Title,
+		Content:     decodeContent(chunk.Content),
+		SourceFile:  sourceFile,
+		SourceLines: decodeSourceLines(chunk.SourceLines),
+		Gotchas:     decodeStringSlice(chunk.Gotchas),
+		Related:     decodeStringSlice(chunk.Related),
+		Score:       score,
+		Version:     version,
+		CreatedAt:   chunk.CreatedAt,
+		UpdatedAt:   chunk.UpdatedAt,
+	}
 }
