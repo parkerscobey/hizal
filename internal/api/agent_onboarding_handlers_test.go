@@ -139,8 +139,8 @@ func TestAgentOnboardingEndpointReturnsAgentProjects(t *testing.T) {
 	if body.AvailableProjects[0].Description == nil || *body.AvailableProjects[0].Description != projectDescription {
 		t.Fatalf("available_projects[0].description = %v, want %q", body.AvailableProjects[0].Description, projectDescription)
 	}
-	if len(body.Skills) != 5 {
-		t.Fatalf("len(skills) = %d, want 5", len(body.Skills))
+	if len(body.Skills) != 6 {
+		t.Fatalf("len(skills) = %d, want 6", len(body.Skills))
 	}
 	expectedSkillURLs := map[string]string{
 		"winnow-compact":  "/api/v1/skills/winnow-compact",
@@ -148,6 +148,7 @@ func TestAgentOnboardingEndpointReturnsAgentProjects(t *testing.T) {
 		"winnow-plan":     "/api/v1/skills/winnow-plan",
 		"winnow-research": "/api/v1/skills/winnow-research",
 		"winnow-review":   "/api/v1/skills/winnow-review",
+		"winnow-seed":     "/api/v1/skills/winnow-seed",
 	}
 	for _, skill := range body.Skills {
 		expectedURL, ok := expectedSkillURLs[skill.ID]
@@ -291,8 +292,8 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 	if len(body.AvailableProjects) != 1 || body.AvailableProjects[0].ID != projectID || body.AvailableProjects[0].Selected {
 		t.Fatalf("available_projects = %+v, want one unselected default project", body.AvailableProjects)
 	}
-	if len(body.Skills) != 5 {
-		t.Fatalf("len(skills) = %d, want 5", len(body.Skills))
+	if len(body.Skills) != 6 {
+		t.Fatalf("len(skills) = %d, want 6", len(body.Skills))
 	}
 	expectedAgentSkillURLs := map[string]string{
 		"winnow-compact":  "/api/v1/agents/" + agentID + "/skills/winnow-compact",
@@ -300,6 +301,7 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 		"winnow-plan":     "/api/v1/agents/" + agentID + "/skills/winnow-plan",
 		"winnow-research": "/api/v1/agents/" + agentID + "/skills/winnow-research",
 		"winnow-review":   "/api/v1/agents/" + agentID + "/skills/winnow-review",
+		"winnow-seed":     "/api/v1/agents/" + agentID + "/skills/winnow-seed",
 	}
 	for _, skill := range body.Skills {
 		expectedURL, ok := expectedAgentSkillURLs[skill.ID]
