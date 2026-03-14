@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/XferOps/winnow/internal/billing"
 	"github.com/XferOps/winnow/internal/mcp"
 	"github.com/XferOps/winnow/internal/seed"
 	"github.com/go-chi/chi/v5"
@@ -53,6 +55,30 @@ func (h *SeedHandlers) SeedProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := requireOrgRole(r, h.pool, orgID, "owner", "admin"); err != nil {
 		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+
+	// Check project is not locked
+	var lockedAt *time.Time
+	h.pool.QueryRow(r.Context(), `SELECT locked_at FROM projects WHERE id = $1`, projectID).Scan(&lockedAt)
+	if lockedAt != nil {
+		writeError(w, http.StatusForbidden, "PROJECT_LOCKED", "this project is read-only — upgrade to Pro to unlock it")
+		return
+	}
+
+	// Check chunk headroom before burning LLM tokens
+	var tier string
+	var chunkCount int
+	h.pool.QueryRow(r.Context(), `SELECT o.tier FROM orgs o WHERE o.id = $1`, orgID).Scan(&tier)
+	h.pool.QueryRow(r.Context(), `
+		SELECT COUNT(*) FROM context_chunks cc
+		JOIN projects p ON p.id = cc.project_id
+		WHERE p.org_id = $1
+	`, orgID).Scan(&chunkCount)
+	limits := billing.For(tier)
+	if limits.ChunkLimit >= 0 && chunkCount >= limits.ChunkLimit {
+		writeError(w, http.StatusPaymentRequired, "CHUNK_LIMIT_REACHED",
+			"You've used all your chunks — upgrade to Pro before seeding this project.")
 		return
 	}
 

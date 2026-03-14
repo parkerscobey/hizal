@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/XferOps/winnow/internal/billing"
 	"github.com/XferOps/winnow/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -36,6 +37,20 @@ func (h *ProjectHandlers) CreateProject(w http.ResponseWriter, r *http.Request) 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" || body.Slug == "" {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "name and slug are required")
 		return
+	}
+
+	// Enforce tier project limit
+	var tier string
+	h.pool.QueryRow(r.Context(), `SELECT tier FROM orgs WHERE id = $1`, orgID).Scan(&tier)
+	limits := billing.For(tier)
+	if limits.ProjectLimit >= 0 {
+		var projectCount int
+		h.pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM projects WHERE org_id = $1`, orgID).Scan(&projectCount)
+		if projectCount >= limits.ProjectLimit {
+			writeError(w, http.StatusPaymentRequired, "PROJECT_LIMIT_REACHED",
+				"You've reached the project limit for your plan. Upgrade to create more projects.")
+			return
+		}
 	}
 
 	var project models.Project
@@ -78,7 +93,7 @@ func (h *ProjectHandlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT p.id, p.org_id, p.name, p.slug, p.description, p.created_at, pm.role
+		SELECT p.id, p.org_id, p.name, p.slug, p.description, p.created_at, p.locked_at, pm.role
 		FROM projects p
 		LEFT JOIN project_memberships pm ON pm.project_id = p.id AND pm.user_id = $2
 		WHERE p.org_id = $1
@@ -97,6 +112,7 @@ func (h *ProjectHandlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 		Slug          string  `json:"slug"`
 		Description   *string `json:"description,omitempty"`
 		CreatedAt     string  `json:"created_at"`
+		Locked        bool    `json:"locked"`
 		IsMember      bool    `json:"is_member"`
 		EffectiveRole *string `json:"effective_role"`
 		CanOpen       bool    `json:"can_open"`
@@ -104,8 +120,9 @@ func (h *ProjectHandlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 	var projects []projectItem
 	for rows.Next() {
 		var project models.Project
+		var lockedAt *time.Time
 		var projectRole *string
-		if err := rows.Scan(&project.ID, &project.OrgID, &project.Name, &project.Slug, &project.Description, &project.CreatedAt, &projectRole); err != nil {
+		if err := rows.Scan(&project.ID, &project.OrgID, &project.Name, &project.Slug, &project.Description, &project.CreatedAt, &lockedAt, &projectRole); err != nil {
 			continue
 		}
 
@@ -129,6 +146,7 @@ func (h *ProjectHandlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 			Slug:          project.Slug,
 			Description:   project.Description,
 			CreatedAt:     project.CreatedAt.Format(time.RFC3339),
+			Locked:        lockedAt != nil,
 			IsMember:      isMember,
 			EffectiveRole: effectiveRole,
 			CanOpen:       canOpen,

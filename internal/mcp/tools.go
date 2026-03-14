@@ -8,6 +8,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/XferOps/winnow/internal/billing"
+
 	"github.com/XferOps/winnow/internal/embeddings"
 	"github.com/XferOps/winnow/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -256,6 +258,27 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	}
 	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
 		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	// Check project is not locked (downgraded)
+	var lockedAt *time.Time
+	if err := pool(t).QueryRow(ctx, `SELECT locked_at FROM projects WHERE id = $1`, projectID).Scan(&lockedAt); err == nil && lockedAt != nil {
+		return nil, fmt.Errorf("PROJECT_LOCKED: this project is read-only — upgrade to Pro to unlock it")
+	}
+
+	// Enforce org-scoped chunk limit
+	var tier string
+	var chunkCount int
+	pool(t).QueryRow(ctx, `SELECT o.tier FROM orgs o JOIN projects p ON p.org_id = o.id WHERE p.id = $1`, projectID).Scan(&tier)
+	pool(t).QueryRow(ctx, `
+		SELECT COUNT(*) FROM context_chunks cc
+		JOIN projects p ON p.id = cc.project_id
+		WHERE p.org_id = (SELECT org_id FROM projects WHERE id = $1)
+	`, projectID).Scan(&chunkCount)
+
+	limits := billing.For(tier)
+	if limits.ChunkLimit >= 0 && chunkCount >= limits.ChunkLimit {
+		return nil, fmt.Errorf("CHUNK_LIMIT_REACHED: you've used all %d chunks on the %s plan — upgrade to write more context", limits.ChunkLimit, tier)
 	}
 
 	emb, err := t.embed.Embed(ctx, in.Content)

@@ -104,14 +104,14 @@ func (h *AuthHandlers) Register(w http.ResponseWriter, r *http.Request) {
 
 	var orgID, finalOrgSlug string
 	err = tx.QueryRow(r.Context(), `
-		INSERT INTO orgs (name, slug) VALUES ($1, $2) RETURNING id, slug
+		INSERT INTO orgs (name, slug, is_personal) VALUES ($1, $2, TRUE) RETURNING id, slug
 	`, orgName, orgSlug).Scan(&orgID, &finalOrgSlug)
 	if err != nil {
 		if isUniqueViolation(err) {
 			// Slug collision — append random suffix and retry
 			orgSlug = orgSlug + "-" + randomSuffix()
 			err = tx.QueryRow(r.Context(), `
-				INSERT INTO orgs (name, slug) VALUES ($1, $2) RETURNING id, slug
+				INSERT INTO orgs (name, slug, is_personal) VALUES ($1, $2, TRUE) RETURNING id, slug
 			`, orgName, orgSlug).Scan(&orgID, &finalOrgSlug)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -283,7 +283,7 @@ func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch orgs
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT o.id, o.name, o.slug, om.role
+		SELECT o.id, o.name, o.slug, o.tier, o.is_personal, om.role
 		FROM orgs o
 		JOIN org_memberships om ON om.org_id = o.id
 		WHERE om.user_id = $1
@@ -296,34 +296,57 @@ func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type orgItem struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-		Slug string `json:"slug"`
-		Role string `json:"role"`
+		ID         string `json:"id"`
+		Name       string `json:"name"`
+		Slug       string `json:"slug"`
+		Tier       string `json:"tier"`
+		IsPersonal bool   `json:"is_personal"`
+		Role       string `json:"role"`
 	}
 	var orgs []orgItem
+	var personalOrgID string
+	var personalTier string
 	for rows.Next() {
 		var org models.Org
+		var isPersonal bool
 		var role string
-		if err := rows.Scan(&org.ID, &org.Name, &org.Slug, &role); err != nil {
+		if err := rows.Scan(&org.ID, &org.Name, &org.Slug, &org.Tier, &isPersonal, &role); err != nil {
 			continue
 		}
+		if isPersonal {
+			personalOrgID = org.ID
+			personalTier = org.Tier
+		}
 		orgs = append(orgs, orgItem{
-			ID:   org.ID,
-			Name: org.Name,
-			Slug: org.Slug,
-			Role: role,
+			ID:         org.ID,
+			Name:       org.Name,
+			Slug:       org.Slug,
+			Tier:       org.Tier,
+			IsPersonal: isPersonal,
+			Role:       role,
 		})
 	}
 	if orgs == nil {
 		orgs = []orgItem{}
 	}
 
+	// Count locked projects across personal org for downgrade modal
+	var lockedProjectCount int
+	if personalOrgID != "" {
+		h.pool.QueryRow(r.Context(), `
+			SELECT COUNT(*) FROM projects
+			WHERE org_id = $1 AND locked_at IS NOT NULL
+		`, personalOrgID).Scan(&lockedProjectCount)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id":    dbUser.ID,
-		"email": dbUser.Email,
-		"name":  dbUser.Name,
-		"orgs":  orgs,
+		"id":                   dbUser.ID,
+		"email":                dbUser.Email,
+		"name":                 dbUser.Name,
+		"orgs":                 orgs,
+		"personal_org_id":      personalOrgID,
+		"tier":                 personalTier,
+		"locked_project_count": lockedProjectCount,
 	})
 }
 

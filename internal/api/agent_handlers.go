@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/XferOps/winnow/internal/billing"
 	"github.com/XferOps/winnow/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -85,6 +86,15 @@ func (h *AgentHandlers) CreateAgent(w http.ResponseWriter, r *http.Request) {
 	// Caller must be an org member.
 	if _, err := requireOrgRole(r, h.pool, orgID, "owner", "admin", "member"); err != nil {
 		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+
+	// Enforce tier: agents are not available on Free/Pro
+	var tier string
+	h.pool.QueryRow(r.Context(), `SELECT tier FROM orgs WHERE id = $1`, orgID).Scan(&tier)
+	if !billing.For(tier).AllowAgents {
+		writeError(w, http.StatusForbidden, "AGENTS_NOT_AVAILABLE",
+			"Agent management requires a Team plan. Use a user-scoped API key instead.")
 		return
 	}
 
