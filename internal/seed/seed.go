@@ -349,13 +349,19 @@ func generateChunk(ctx context.Context, llm *openai.Client, meta *RepoMeta, quer
 		sb.WriteString(fmt.Sprintf("=== %s ===\n%s\n\n", path, content))
 	}
 
-	systemPrompt := `You are a technical documentation writer generating context chunks for an AI knowledge base.
+	systemPrompt := `You are a technical knowledge extractor building a context base for AI coding agents.
 
-CRITICAL RULES:
-- Do not invent, speculate, or fill in gaps. Only document what is clearly present in the provided files.
-- Be concise and factual. 2-4 paragraphs of content maximum.
-- If the files don't contain enough information for a meaningful chunk, return null.
-- Return only valid JSON matching the schema. No markdown fences, no explanation.`
+Your output will be retrieved by agents that need to write, debug, and review code in this repository.
+A great chunk lets an agent produce correct, idiomatic code immediately — without reading the source files.
+
+RULES:
+- Use structured markdown: headers, bullet lists, inline code, fenced code blocks.
+- Be concrete: real function/method/type names, real signatures, real file paths, real SQL columns, real env var names.
+- Include short code snippets that show the canonical pattern — not a description of the pattern.
+- Do not write narrative prose ("The system uses..."). Write a technical reference ("## Auth\n- jwtMiddleware applied via...").
+- Do not invent or speculate. Only document what is clearly present in the provided files.
+- If the files don't contain enough substance for a useful chunk, return null.
+- Return only valid JSON. No markdown fences around the JSON, no explanation outside it.`
 
 	userPrompt := fmt.Sprintf(`Repository: %s/%s
 %s
@@ -368,13 +374,13 @@ Files:
 
 Return a JSON object with exactly these fields:
 {
-  "title": "short descriptive title (max 80 chars)",
-  "content": "2-4 paragraphs describing what you found",
-  "gotchas": ["array of gotchas or warnings, or empty array"],
-  "related": ["optional: other category names relevant to this chunk"]
+  "title": "precise title naming the specific thing, not just the category (max 80 chars)",
+  "content": "structured markdown reference — headers, real names, real signatures, inline code and fenced snippets where they add clarity. An agent reading this should know exactly what to call and how.",
+  "gotchas": ["specific things that will trip up an agent — e.g. 'WriteTimeout must be 0 for SSE or the handler is killed mid-stream'. No generic warnings."],
+  "related": ["other category query_key names relevant to understanding this one"]
 }
 
-If the files don't contain enough information for a meaningful chunk, return: null`,
+If the files don't contain enough substance for a useful chunk, return: null`,
 		meta.Owner, meta.Repo,
 		descriptionLine(meta),
 		queryKey,
@@ -383,7 +389,7 @@ If the files don't contain enough information for a meaningful chunk, return: nu
 	)
 
 	resp, err := llm.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4oMini,
+		Model: openai.GPT4o,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: userPrompt},
