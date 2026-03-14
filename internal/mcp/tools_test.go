@@ -2,12 +2,133 @@ package mcp
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/XferOps/winnow/internal/models"
 	"github.com/pgvector/pgvector-go"
 )
+
+func TestComputeFreshness(t *testing.T) {
+	t.Parallel()
+
+	approx := func(t *testing.T, got, want float64) {
+		t.Helper()
+		if math.Abs(got-want) > 0.001 {
+			t.Fatalf("freshness = %.4f, want %.4f", got, want)
+		}
+	}
+
+	now := time.Now()
+	day := 24 * time.Hour
+
+	t.Run("just created is fully fresh", func(t *testing.T) {
+		approx(t, computeFreshness(now), 1.0)
+	})
+
+	t.Run("15 days old is fully fresh", func(t *testing.T) {
+		approx(t, computeFreshness(now.Add(-15*day)), 1.0)
+	})
+
+	t.Run("exactly at decay start is still fully fresh", func(t *testing.T) {
+		// 30 days — right at the boundary, no penalty yet
+		approx(t, computeFreshness(now.Add(-time.Duration(FreshnessDecayStartDays)*day)), 1.0)
+	})
+
+	t.Run("halfway through decay window gets half penalty", func(t *testing.T) {
+		// 60 days — halfway between 30 and 90
+		// freshness = 1.0 - 0.3 * 0.5 = 0.85
+		midAge := now.Add(-time.Duration((FreshnessDecayStartDays + FreshnessDecayFullDays) / 2 * float64(day)))
+		approx(t, computeFreshness(midAge), 1.0-(1.0-FreshnessMin)*0.5)
+	})
+
+	t.Run("at full decay window gets minimum freshness", func(t *testing.T) {
+		approx(t, computeFreshness(now.Add(-time.Duration(FreshnessDecayFullDays)*day)), FreshnessMin)
+	})
+
+	t.Run("beyond full decay window is clamped at minimum", func(t *testing.T) {
+		approx(t, computeFreshness(now.Add(-120*day)), FreshnessMin)
+		approx(t, computeFreshness(now.Add(-365*day)), FreshnessMin)
+	})
+
+	t.Run("old chunk with recent review resets to fully fresh", func(t *testing.T) {
+		// The chunk's content is 90 days old but was reviewed yesterday.
+		// Caller passes the most recent activity (the review date) to computeFreshness.
+		recentReview := now.Add(-1 * day)
+		approx(t, computeFreshness(recentReview), 1.0)
+	})
+
+	t.Run("freshness is monotonically decreasing with age", func(t *testing.T) {
+		prev := computeFreshness(now)
+		for days := 1; days <= 120; days++ {
+			curr := computeFreshness(now.Add(-time.Duration(days) * day))
+			if curr > prev+0.001 { // allow tiny float drift
+				t.Fatalf("freshness increased from day %d to %d: %.4f → %.4f", days-1, days, prev, curr)
+			}
+			prev = curr
+		}
+	})
+
+	t.Run("freshness is always in valid range", func(t *testing.T) {
+		for days := 0; days <= 365; days++ {
+			f := computeFreshness(now.Add(-time.Duration(days) * day))
+			if f < FreshnessMin-0.001 || f > 1.001 {
+				t.Fatalf("freshness %.4f out of [%.1f, 1.0] at day %d", f, FreshnessMin, days)
+			}
+		}
+	})
+}
+
+func TestScanChunkSearchRow(t *testing.T) {
+	t.Parallel()
+
+	sourceFile := "internal/api/handlers.go"
+	createdByAgent := "agent-xyz"
+	createdAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	updatedAt := createdAt.Add(24 * time.Hour)
+	lastReviewAt := createdAt.Add(48 * time.Hour)
+
+	row := stubScanner{values: []any{
+		"chunk-search-1",
+		"project-abc",
+		"auth-flow",
+		"JWT middleware",
+		encodeContent("Validates bearer tokens"),
+		pgvector.NewVector([]float32{0.3, 0.4}),
+		&sourceFile,
+		[]byte(`[10,20]`),
+		encodeStringSlice([]string{"token expires"}),
+		encodeStringSlice([]string{"chunk-related"}),
+		&createdByAgent,
+		createdAt,
+		updatedAt,
+		2,      // version
+		0.88,   // cosine score
+		lastReviewAt,
+	}}
+
+	chunk, version, score, gotLastReviewAt, err := scanChunkSearchRow(row)
+	if err != nil {
+		t.Fatalf("scanChunkSearchRow() error = %v", err)
+	}
+
+	if chunk.ID != "chunk-search-1" {
+		t.Fatalf("ID = %q, want chunk-search-1", chunk.ID)
+	}
+	if chunk.ProjectID != "project-abc" {
+		t.Fatalf("ProjectID = %q, want project-abc", chunk.ProjectID)
+	}
+	if version != 2 {
+		t.Fatalf("version = %d, want 2", version)
+	}
+	if score != 0.88 {
+		t.Fatalf("score = %.2f, want 0.88", score)
+	}
+	if !gotLastReviewAt.Equal(lastReviewAt) {
+		t.Fatalf("lastReviewAt = %v, want %v", gotLastReviewAt, lastReviewAt)
+	}
+}
 
 func TestChunkResultFromModel(t *testing.T) {
 	t.Parallel()

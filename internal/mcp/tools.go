@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/XferOps/winnow/internal/embeddings"
@@ -12,6 +13,33 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 )
+
+// Freshness decay constants. A chunk is considered "fresh" for the first
+// freshnessDecayStartDays days after its last activity (update or review).
+// After that, a linear penalty is applied up to a maximum of 30% at
+// freshnessDecayFullDays. These values are intentionally exported so they
+// can be referenced in tests and documentation.
+const (
+	FreshnessDecayStartDays float64 = 30  // no penalty before this age (days)
+	FreshnessDecayFullDays  float64 = 90  // full penalty applied at this age (days)
+	FreshnessMin            float64 = 0.7 // floor multiplier (max 30% penalty)
+)
+
+// computeFreshness returns a score multiplier in [FreshnessMin, 1.0] based on
+// how recently the chunk was active. lastActivity should be the most recent of
+// updated_at and the latest review created_at for the chunk.
+func computeFreshness(lastActivity time.Time) float64 {
+	ageDays := time.Since(lastActivity).Hours() / 24.0
+	if ageDays <= FreshnessDecayStartDays {
+		return 1.0
+	}
+	window := FreshnessDecayFullDays - FreshnessDecayStartDays
+	decay := (ageDays - FreshnessDecayStartDays) / window
+	if decay >= 1.0 {
+		return FreshnessMin
+	}
+	return 1.0 - (1.0-FreshnessMin)*decay
+}
 
 // Tools holds all MCP tool implementations.
 type Tools struct {
@@ -60,6 +88,7 @@ type ChunkResult struct {
 	Gotchas     []string  `json:"gotchas,omitempty"`
 	Related     []string  `json:"related,omitempty"`
 	Score       float64   `json:"score,omitempty"`
+	Freshness   float64   `json:"freshness,omitempty"`
 	Version     int       `json:"version,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -275,13 +304,22 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	}
 	vec := pgvector.NewVector(emb)
 
+	// last_review_at: most recent review date, or updated_at if no reviews exist.
+	// Used to compute freshness decay — a recent review resets the staleness clock.
+	const searchCols = `
+		cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+		cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
+		COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
+		COALESCE(1 - (cc.embedding <=> $1), 0) AS score,
+		COALESCE(
+			(SELECT MAX(cr.created_at) FROM context_reviews cr WHERE cr.chunk_id = cc.id),
+			cc.updated_at
+		) AS last_review_at`
+
 	var rows pgxRows
 	if in.QueryKey != "" {
 		rows, err = pool(t).Query(ctx, `
-			SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
-			       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
-			       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
-			       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
+			SELECT`+searchCols+`
 			FROM context_chunks cc
 			WHERE cc.project_id = $2 AND cc.query_key = $3
 			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
@@ -289,10 +327,7 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 		`, vec, projectID, in.QueryKey, limit)
 	} else {
 		rows, err = pool(t).Query(ctx, `
-			SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
-			       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
-			       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
-			       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
+			SELECT`+searchCols+`
 			FROM context_chunks cc
 			WHERE cc.project_id = $2
 			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
@@ -306,12 +341,27 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 
 	results := []ChunkResult{}
 	for rows.Next() {
-		chunk, version, score, err := scanChunkResultRow(rows)
+		chunk, version, cosineScore, lastReviewAt, err := scanChunkSearchRow(rows)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, chunkResultFromModel(chunk, version, score))
+		// lastActivity is the most recent of updated_at and the latest review.
+		lastActivity := lastReviewAt
+		if chunk.UpdatedAt.After(lastActivity) {
+			lastActivity = chunk.UpdatedAt
+		}
+		freshness := computeFreshness(lastActivity)
+		result := chunkResultFromModel(chunk, version, cosineScore*freshness)
+		result.Freshness = freshness
+		results = append(results, result)
 	}
+
+	// Re-sort by adjusted score (freshness already baked in). The SQL ORDER BY
+	// used raw cosine distance, so the final ranking may shift slightly after decay.
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
 	return &SearchContextResult{Results: results}, nil
 }
 
@@ -665,6 +715,34 @@ func scanChunkResultRow(row pgxScanner) (models.ContextChunk, int, float64, erro
 		&score,
 	)
 	return chunk, version, score, err
+}
+
+// scanChunkSearchRow is like scanChunkResultRow but also scans the extra
+// last_review_at column emitted by the SearchContext query.
+func scanChunkSearchRow(row pgxScanner) (models.ContextChunk, int, float64, time.Time, error) {
+	var chunk models.ContextChunk
+	var version int
+	var score float64
+	var lastReviewAt time.Time
+	err := row.Scan(
+		&chunk.ID,
+		&chunk.ProjectID,
+		&chunk.QueryKey,
+		&chunk.Title,
+		&chunk.Content,
+		&chunk.Embedding,
+		&chunk.SourceFile,
+		&chunk.SourceLines,
+		&chunk.Gotchas,
+		&chunk.Related,
+		&chunk.CreatedByAgent,
+		&chunk.CreatedAt,
+		&chunk.UpdatedAt,
+		&version,
+		&score,
+		&lastReviewAt,
+	)
+	return chunk, version, score, lastReviewAt, err
 }
 
 func chunkResultFromModel(chunk models.ContextChunk, version int, score float64) ChunkResult {
