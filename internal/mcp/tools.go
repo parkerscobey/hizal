@@ -78,20 +78,33 @@ type SearchContextInput struct {
 	QueryKey  string `json:"query_key,omitempty"`
 }
 
+// StaleSignal represents a review that flagged a chunk as potentially stale.
+// Explicit non-keep actions (needs_update, outdated, incorrect) and low rating
+// scores (usefulness < 3 or correctness < 3) both produce signals.
+type StaleSignal struct {
+	// Action is the review action: "needs_update", "outdated", "incorrect", etc.
+	// Set to "low_score" when a score-based signal fires without an explicit action.
+	Action    string    `json:"action"`
+	// Note is the most relevant reviewer note (correctness_note preferred, then usefulness_note).
+	Note      string    `json:"note,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type ChunkResult struct {
-	ID          string    `json:"id"`
-	QueryKey    string    `json:"query_key"`
-	Title       string    `json:"title"`
-	Content     string    `json:"content"`
-	SourceFile  string    `json:"source_file,omitempty"`
-	SourceLines []int     `json:"source_lines,omitempty"`
-	Gotchas     []string  `json:"gotchas,omitempty"`
-	Related     []string  `json:"related,omitempty"`
-	Score       float64   `json:"score,omitempty"`
-	Freshness   float64   `json:"freshness,omitempty"`
-	Version     int       `json:"version,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           string        `json:"id"`
+	QueryKey     string        `json:"query_key"`
+	Title        string        `json:"title"`
+	Content      string        `json:"content"`
+	SourceFile   string        `json:"source_file,omitempty"`
+	SourceLines  []int         `json:"source_lines,omitempty"`
+	Gotchas      []string      `json:"gotchas,omitempty"`
+	Related      []string      `json:"related,omitempty"`
+	Score        float64       `json:"score,omitempty"`
+	Freshness    float64       `json:"freshness,omitempty"`
+	StaleSignals []StaleSignal `json:"stale_signals,omitempty"`
+	Version      int           `json:"version,omitempty"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 type SearchContextResult struct {
@@ -362,6 +375,22 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
+
+	// Attach any stale signals (non-keep review actions + low scores) in one
+	// batch query so agents know which chunks may need attention.
+	chunkIDs := make([]string, len(results))
+	for i, r := range results {
+		chunkIDs[i] = r.ID
+	}
+	signals, err := t.fetchStaleSignals(ctx, chunkIDs)
+	if err != nil {
+		return nil, fmt.Errorf("fetch stale signals: %w", err)
+	}
+	for i, r := range results {
+		if ss := signals[r.ID]; len(ss) > 0 {
+			results[i].StaleSignals = ss
+		}
+	}
 
 	return &SearchContextResult{Results: results}, nil
 }
@@ -635,6 +664,53 @@ func (t *Tools) DeleteContext(ctx context.Context, projectID, id string) (*Delet
 	}
 	deleted := result.RowsAffected() > 0
 	return &DeleteContextResult{Deleted: deleted, ID: id}, nil
+}
+
+// fetchStaleSignals returns a map of chunk ID → stale signals for a batch of
+// chunk IDs. A signal is generated when a review has a non-keep action (e.g.
+// "needs_update", "outdated", "incorrect") or a low rating (usefulness < 3 or
+// correctness < 3). One query fetches all signals for the full result set.
+func (t *Tools) fetchStaleSignals(ctx context.Context, chunkIDs []string) (map[string][]StaleSignal, error) {
+	if len(chunkIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := pool(t).Query(ctx, `
+		SELECT
+			chunk_id,
+			CASE
+				WHEN action IS NOT NULL AND action <> '' AND action <> 'keep' THEN action
+				ELSE 'low_score'
+			END AS action,
+			COALESCE(NULLIF(correctness_note, ''), NULLIF(usefulness_note, ''), '') AS note,
+			created_at
+		FROM context_reviews
+		WHERE chunk_id = ANY($1)
+		  AND (
+		    (action IS NOT NULL AND action <> '' AND action <> 'keep')
+		    OR usefulness < 3
+		    OR correctness < 3
+		  )
+		ORDER BY created_at DESC
+	`, chunkIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := map[string][]StaleSignal{}
+	for rows.Next() {
+		var chunkID, action, note string
+		var createdAt time.Time
+		if err := rows.Scan(&chunkID, &action, &note, &createdAt); err != nil {
+			return nil, err
+		}
+		result[chunkID] = append(result[chunkID], StaleSignal{
+			Action:    action,
+			Note:      note,
+			CreatedAt: createdAt,
+		})
+	}
+	return result, rows.Err()
 }
 
 // ---- Helpers ----

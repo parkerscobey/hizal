@@ -1,8 +1,11 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +131,121 @@ func TestScanChunkSearchRow(t *testing.T) {
 	if !gotLastReviewAt.Equal(lastReviewAt) {
 		t.Fatalf("lastReviewAt = %v, want %v", gotLastReviewAt, lastReviewAt)
 	}
+}
+
+func TestFetchStaleSignals_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	// Empty chunk ID slice should short-circuit before any DB call.
+	// Pool is nil to prove the DB is never touched.
+	tools := &Tools{pool: nil, embed: nil}
+	signals, err := tools.fetchStaleSignals(context.Background(), []string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if signals != nil {
+		t.Fatalf("expected nil map for empty input, got %v", signals)
+	}
+}
+
+func TestStaleSignalJSON(t *testing.T) {
+	t.Parallel()
+
+	ts := time.Date(2026, time.March, 14, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		signal   StaleSignal
+		wantKeys []string
+		noKeys   []string
+	}{
+		{
+			name:     "explicit action with note",
+			signal:   StaleSignal{Action: "needs_update", Note: "auth flow changed in PR #42", CreatedAt: ts},
+			wantKeys: []string{`"action":"needs_update"`, `"note":"auth flow changed in PR #42"`},
+		},
+		{
+			name:     "low_score action without note omits note field",
+			signal:   StaleSignal{Action: "low_score", CreatedAt: ts},
+			wantKeys: []string{`"action":"low_score"`},
+			noKeys:   []string{`"note"`},
+		},
+		{
+			name:     "outdated action",
+			signal:   StaleSignal{Action: "outdated", Note: "API was redesigned", CreatedAt: ts},
+			wantKeys: []string{`"action":"outdated"`, `"note":"API was redesigned"`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b, err := json.Marshal(tt.signal)
+			if err != nil {
+				t.Fatalf("marshal error: %v", err)
+			}
+			got := string(b)
+			for _, want := range tt.wantKeys {
+				if !strings.Contains(got, want) {
+					t.Fatalf("JSON %q missing %q", got, want)
+				}
+			}
+			for _, absent := range tt.noKeys {
+				if strings.Contains(got, absent) {
+					t.Fatalf("JSON %q should not contain %q", got, absent)
+				}
+			}
+		})
+	}
+}
+
+func TestChunkResultStaleSignals(t *testing.T) {
+	t.Parallel()
+
+	ts := time.Date(2026, time.March, 14, 10, 0, 0, 0, time.UTC)
+
+	t.Run("stale_signals omitted when empty", func(t *testing.T) {
+		r := ChunkResult{ID: "c1", QueryKey: "k", Title: "T", Content: "C", CreatedAt: ts, UpdatedAt: ts}
+		b, _ := json.Marshal(r)
+		if strings.Contains(string(b), "stale_signals") {
+			t.Fatalf("stale_signals should be omitted when nil: %s", b)
+		}
+	})
+
+	t.Run("stale_signals present when populated", func(t *testing.T) {
+		r := ChunkResult{
+			ID: "c2", QueryKey: "k", Title: "T", Content: "C", CreatedAt: ts, UpdatedAt: ts,
+			StaleSignals: []StaleSignal{
+				{Action: "needs_update", Note: "schema changed", CreatedAt: ts},
+			},
+		}
+		b, _ := json.Marshal(r)
+		got := string(b)
+		if !strings.Contains(got, `"stale_signals"`) {
+			t.Fatalf("stale_signals missing from output: %s", got)
+		}
+		if !strings.Contains(got, `"needs_update"`) {
+			t.Fatalf("signal action missing from output: %s", got)
+		}
+		if !strings.Contains(got, `"schema changed"`) {
+			t.Fatalf("signal note missing from output: %s", got)
+		}
+	})
+
+	t.Run("multiple signals preserved in order", func(t *testing.T) {
+		r := ChunkResult{
+			ID: "c3", QueryKey: "k", Title: "T", Content: "C", CreatedAt: ts, UpdatedAt: ts,
+			StaleSignals: []StaleSignal{
+				{Action: "outdated", Note: "v2 API released", CreatedAt: ts},
+				{Action: "low_score", CreatedAt: ts.Add(-24 * time.Hour)},
+			},
+		}
+		b, _ := json.Marshal(r)
+		got := string(b)
+		if !strings.Contains(got, `"outdated"`) || !strings.Contains(got, `"low_score"`) {
+			t.Fatalf("expected both signals in output: %s", got)
+		}
+	})
 }
 
 func TestChunkResultFromModel(t *testing.T) {
