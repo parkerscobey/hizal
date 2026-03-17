@@ -57,6 +57,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Post("/register", authH.Register)
 		r.Post("/login", authH.Login)
 		r.With(JWTAuth()).Get("/me", authH.Me)
+		r.With(JWTAuth()).Patch("/me", authH.UpdateUser)
 		r.Post("/accept-invite", inviteH.AcceptInvite)
 	})
 
@@ -108,6 +109,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Get("/v1/orgs/{id}/usage", UsageHandler(pool))
 		r.Post("/v1/billing/checkout", billingH.CreateCheckout)
 		r.Post("/v1/billing/portal", billingH.CreatePortal)
+		r.Post("/v1/billing/subscription/cancel", billingH.CancelSubscription)
 		r.Post("/v1/billing/downgrade-choice", billingH.DowngradeChoice)
 
 		// Project memberships

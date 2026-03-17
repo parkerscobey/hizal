@@ -266,6 +266,49 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PATCH /v1/auth/me
+func (h *AuthHandlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := JWTUserFrom(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "not authenticated")
+		return
+	}
+
+	var body struct {
+		Name *string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if body.Name == nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "name is required")
+		return
+	}
+	if *body.Name == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "name cannot be empty")
+		return
+	}
+
+	var updatedUser models.User
+	err := h.pool.QueryRow(r.Context(), `
+		UPDATE users
+		SET name = $1, updated_at = NOW()
+		WHERE id = $2
+		RETURNING id, email, name
+	`, *body.Name, user.ID).Scan(&updatedUser.ID, &updatedUser.Email, &updatedUser.Name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":    updatedUser.ID,
+		"email": updatedUser.Email,
+		"name":  updatedUser.Name,
+	})
+}
+
 // GET /v1/auth/me
 func (h *AuthHandlers) Me(w http.ResponseWriter, r *http.Request) {
 	user, ok := JWTUserFrom(r.Context())

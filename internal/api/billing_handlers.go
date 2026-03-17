@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/XferOps/winnow/internal/billing"
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 	checkoutsession "github.com/stripe/stripe-go/v78/checkout/session"
 	portalsession "github.com/stripe/stripe-go/v78/billingportal/session"
 	stripewebhook "github.com/stripe/stripe-go/v78/webhook"
+	sub "github.com/stripe/stripe-go/v78/subscription"
 )
 
 type BillingHandlers struct {
@@ -58,6 +60,9 @@ func (h *BillingHandlers) CreateCheckout(w http.ResponseWriter, r *http.Request)
 	successURL := os.Getenv("STRIPE_SUCCESS_URL")
 	cancelURL := os.Getenv("STRIPE_CANCEL_URL")
 
+	successURL = strings.ReplaceAll(successURL, ":orgId", orgID)
+	cancelURL = strings.ReplaceAll(cancelURL, ":orgId", orgID)
+
 	params := &stripe.CheckoutSessionParams{
 		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
@@ -89,14 +94,15 @@ func (h *BillingHandlers) CreatePortal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var orgID string
 	var stripeCustomerID *string
 	err := h.pool.QueryRow(r.Context(), `
-		SELECT o.stripe_customer_id
+		SELECT o.id, o.stripe_customer_id
 		FROM orgs o
 		JOIN org_memberships om ON om.org_id = o.id
 		WHERE om.user_id = $1 AND o.is_personal = TRUE
 		LIMIT 1
-	`, user.ID).Scan(&stripeCustomerID)
+	`, user.ID).Scan(&orgID, &stripeCustomerID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -107,7 +113,8 @@ func (h *BillingHandlers) CreatePortal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
-	returnURL := os.Getenv("STRIPE_CANCEL_URL") // reuse cancel URL as portal return
+	returnURL := os.Getenv("STRIPE_CANCEL_URL")
+	returnURL = strings.ReplaceAll(returnURL, ":orgId", orgID)
 
 	params := &stripe.BillingPortalSessionParams{
 		Customer:  stripeCustomerID,
@@ -119,6 +126,64 @@ func (h *BillingHandlers) CreatePortal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": sess.URL})
+}
+
+// POST /v1/billing/subscription/cancel
+// Cancels the user's subscription at the end of the billing period.
+func (h *BillingHandlers) CancelSubscription(w http.ResponseWriter, r *http.Request) {
+	user, ok := JWTUserFrom(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "not authenticated")
+		return
+	}
+
+	var orgID, tier, subStatus string
+	var stripeSubID *string
+	err := h.pool.QueryRow(r.Context(), `
+		SELECT o.id, o.tier, o.stripe_subscription_status, o.stripe_subscription_id
+		FROM orgs o
+		JOIN org_memberships om ON om.org_id = o.id
+		WHERE om.user_id = $1 AND o.is_personal = TRUE
+		LIMIT 1
+	`, user.ID).Scan(&orgID, &tier, &subStatus, &stripeSubID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	if stripeSubID == nil || *stripeSubID == "" {
+		writeError(w, http.StatusBadRequest, "NO_SUBSCRIPTION", "no active subscription found")
+		return
+	}
+
+	if subStatus == "cancelled" || subStatus == "canceled" || subStatus == "past_due" {
+		writeError(w, http.StatusBadRequest, "ALREADY_CANCELLED", "subscription is already cancelled")
+		return
+	}
+
+	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
+	params := &stripe.SubscriptionParams{
+		CancelAtPeriodEnd: stripe.Bool(true),
+	}
+	_, err = sub.Update(*stripeSubID, params)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "STRIPE_ERROR", err.Error())
+		return
+	}
+
+	_, err = h.pool.Exec(r.Context(), `
+		UPDATE orgs SET stripe_subscription_status = 'canceled', updated_at = NOW()
+		WHERE id = $1
+	`, orgID)
+	if err != nil {
+		log.Printf("billing: failed to update cancel status for org %s: %v", orgID, err)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":             "canceled",
+		"message":            "subscription will be cancelled at the end of the billing period",
+		"effective_date":     "end_of_billing_period",
+	})
 }
 
 // POST /v1/webhooks/stripe
@@ -133,7 +198,9 @@ func (h *BillingHandlers) HandleWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
-	event, err := stripewebhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret)
+	event, err := stripewebhook.ConstructEventWithOptions(body, r.Header.Get("Stripe-Signature"), webhookSecret, stripewebhook.ConstructEventOptions{
+		IgnoreAPIVersionMismatch: true,
+	})
 	if err != nil {
 		log.Printf("billing: webhook signature verification failed: %v", err)
 		writeError(w, http.StatusBadRequest, "INVALID_SIGNATURE", "webhook signature verification failed")
