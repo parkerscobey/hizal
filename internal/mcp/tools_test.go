@@ -88,13 +88,14 @@ func TestScanChunkSearchRow(t *testing.T) {
 
 	sourceFile := "internal/api/handlers.go"
 	createdByAgent := "agent-xyz"
+	projectABC := "project-abc"
 	createdAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	updatedAt := createdAt.Add(24 * time.Hour)
 	lastReviewAt := createdAt.Add(48 * time.Hour)
 
 	row := stubScanner{values: []any{
 		"chunk-search-1",
-		"project-abc",
+		&projectABC,
 		"auth-flow",
 		"JWT middleware",
 		encodeContent("Validates bearer tokens"),
@@ -119,8 +120,8 @@ func TestScanChunkSearchRow(t *testing.T) {
 	if chunk.ID != "chunk-search-1" {
 		t.Fatalf("ID = %q, want chunk-search-1", chunk.ID)
 	}
-	if chunk.ProjectID != "project-abc" {
-		t.Fatalf("ProjectID = %q, want project-abc", chunk.ProjectID)
+	if chunk.ProjectID == nil || *chunk.ProjectID != "project-abc" {
+		t.Fatalf("ProjectID = %v, want project-abc", chunk.ProjectID)
 	}
 	if version != 2 {
 		t.Fatalf("version = %d, want 2", version)
@@ -329,12 +330,13 @@ func TestScanChunkResultRow(t *testing.T) {
 
 	sourceFile := "internal/mcp/tools.go"
 	createdByAgent := "agent-123"
+	projectXYZ := "project-xyz"
 	createdAt := time.Date(2026, time.March, 11, 9, 30, 0, 0, time.UTC)
 	updatedAt := createdAt.Add(30 * time.Minute)
 
 	row := stubScanner{values: []any{
 		"chunk-abc",
-		"project-xyz",
+		&projectXYZ,
 		"search-key",
 		"Search chunk",
 		encodeContent("Compaction candidate"),
@@ -355,8 +357,8 @@ func TestScanChunkResultRow(t *testing.T) {
 		t.Fatalf("scanChunkResultRow() error = %v", err)
 	}
 
-	if chunk.ProjectID != "project-xyz" {
-		t.Fatalf("ProjectID = %q, want project-xyz", chunk.ProjectID)
+	if chunk.ProjectID == nil || *chunk.ProjectID != "project-xyz" {
+		t.Fatalf("ProjectID = %v, want project-xyz", chunk.ProjectID)
 	}
 	if chunk.SourceFile == nil || *chunk.SourceFile != sourceFile {
 		t.Fatalf("SourceFile = %v, want %q", chunk.SourceFile, sourceFile)
