@@ -208,37 +208,40 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "search_context",
-		Description: "Semantic search over stored context chunks.",
+		Description: "Semantic search over stored context chunks. Searches across all accessible scopes by default (PROJECT, AGENT, ORG). Use scope, agent_id, org_id, chunk_type, and always_inject_only to narrow results.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID to scope this search"},
-				"query":      map[string]interface{}{"type": "string", "description": "Search query"},
-				"limit":      map[string]interface{}{"type": "integer", "description": "Max results (default 10)"},
-				"query_key":  map[string]interface{}{"type": "string", "description": "Filter by query_key"},
+				"project_id":        map[string]interface{}{"type": "string", "description": "Project UUID — required for PROJECT scope searches"},
+				"query":             map[string]interface{}{"type": "string", "description": "Search query"},
+				"scope":             map[string]interface{}{"type": "string", "description": "Filter to scope: PROJECT | AGENT | ORG. Omit to search all accessible scopes."},
+				"agent_id":          map[string]interface{}{"type": "string", "description": "Filter to AGENT-scoped chunks for this agent UUID"},
+				"org_id":            map[string]interface{}{"type": "string", "description": "Filter to ORG-scoped chunks for this org UUID"},
+				"chunk_type":        map[string]interface{}{"type": "string", "description": "Filter by chunk_type: KNOWLEDGE | MEMORY | CONVENTION | IDENTITY | PRINCIPLE"},
+				"always_inject_only": map[string]interface{}{"type": "boolean", "description": "If true, return only always_inject=true chunks"},
+				"limit":             map[string]interface{}{"type": "integer", "description": "Max results (default 10)"},
+				"query_key":         map[string]interface{}{"type": "string", "description": "Filter by exact query_key"},
 			},
-			"required": []string{"project_id", "query"},
+			"required": []string{"query"},
 		},
 	},
 	{
 		Name:        "read_context",
-		Description: "Fetch a context chunk by ID including version history.",
+		Description: "Fetch a context chunk by ID including version history. Scope-aware: works for PROJECT, AGENT, and ORG chunks.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID containing this chunk"},
-				"id":         map[string]interface{}{"type": "string", "description": "Chunk UUID"},
+				"id": map[string]interface{}{"type": "string", "description": "Chunk UUID"},
 			},
-			"required": []string{"project_id", "id"},
+			"required": []string{"id"},
 		},
 	},
 	{
 		Name:        "update_context",
-		Description: "Update an existing context chunk, recording a new version.",
+		Description: "Update an existing context chunk, recording a new version. Scope-aware: works for chunks across all scopes.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id":   map[string]interface{}{"type": "string", "description": "Project UUID containing this chunk"},
 				"id":           map[string]interface{}{"type": "string"},
 				"title":        map[string]interface{}{"type": "string"},
 				"content":      map[string]interface{}{"type": "string"},
@@ -248,7 +251,7 @@ var toolList = []toolSchema{
 				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
 				"change_note":  map[string]interface{}{"type": "string", "description": "Required: describe what changed"},
 			},
-			"required": []string{"project_id", "id", "change_note"},
+			"required": []string{"id", "change_note"},
 		},
 	},
 	{
@@ -257,24 +260,27 @@ var toolList = []toolSchema{
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID containing this chunk"},
-				"id":         map[string]interface{}{"type": "string"},
-				"limit":      map[string]interface{}{"type": "integer", "description": "Max versions (default 10)"},
+				"id":    map[string]interface{}{"type": "string"},
+				"limit": map[string]interface{}{"type": "integer", "description": "Max versions (default 10)"},
 			},
-			"required": []string{"project_id", "id"},
+			"required": []string{"id"},
 		},
 	},
 	{
 		Name:        "compact_context",
-		Description: "Retrieve semantically relevant chunks for context compaction (no server-side summarization).",
+		Description: "Retrieve semantically relevant chunks for agent-side synthesis. READ ONLY — never delete source chunks after writing a synthesis. Compaction is lossy; this tool is for reading, not merging. Scope-aware: use scope/agent_id/org_id to target the right memory layer.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID to compact within"},
+				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID for PROJECT-scoped search"},
+				"scope":      map[string]interface{}{"type": "string", "description": "Filter to scope: PROJECT | AGENT | ORG"},
+				"agent_id":   map[string]interface{}{"type": "string", "description": "Filter to AGENT-scoped chunks"},
+				"org_id":     map[string]interface{}{"type": "string", "description": "Filter to ORG-scoped chunks"},
+				"chunk_type": map[string]interface{}{"type": "string", "description": "Filter by chunk_type"},
 				"query":      map[string]interface{}{"type": "string"},
 				"limit":      map[string]interface{}{"type": "integer", "description": "Max chunks (default 50)"},
 			},
-			"required": []string{"project_id", "query"},
+			"required": []string{"query"},
 		},
 	},
 	{

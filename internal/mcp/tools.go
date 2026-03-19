@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/XferOps/winnow/internal/billing"
@@ -159,9 +160,20 @@ type WriteContextResult struct {
 
 type SearchContextInput struct {
 	ProjectID string `json:"project_id,omitempty"`
-	Query     string `json:"query"`
-	Limit     int    `json:"limit,omitempty"`
-	QueryKey  string `json:"query_key,omitempty"`
+	// Scope filters results to a specific scope. If empty, searches all accessible scopes.
+	// Values: PROJECT | AGENT | ORG
+	Scope    string `json:"scope,omitempty"`
+	// AgentID filters results to a specific agent (for AGENT-scoped chunks).
+	AgentID  string `json:"agent_id,omitempty"`
+	// OrgID filters results to org-scoped chunks. If empty, derived from API key.
+	OrgID    string `json:"org_id,omitempty"`
+	Query    string `json:"query"`
+	Limit    int    `json:"limit,omitempty"`
+	QueryKey string `json:"query_key,omitempty"`
+	// ChunkType filters by chunk_type (KNOWLEDGE, MEMORY, CONVENTION, IDENTITY, PRINCIPLE).
+	ChunkType string `json:"chunk_type,omitempty"`
+	// AlwaysInjectOnly filters to only always_inject=true chunks.
+	AlwaysInjectOnly bool `json:"always_inject_only,omitempty"`
 }
 
 // StaleSignal represents a review that flagged a chunk as potentially stale.
@@ -248,6 +260,10 @@ type GetVersionsResult struct {
 
 type CompactContextInput struct {
 	ProjectID string `json:"project_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+	OrgID     string `json:"org_id,omitempty"`
+	ChunkType string `json:"chunk_type,omitempty"`
 	Query     string `json:"query"`
 	Limit     int    `json:"limit,omitempty"`
 }
@@ -433,9 +449,6 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 }
 
 func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchContextInput) (*SearchContextResult, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project_id is required (set X-Project-ID header)")
-	}
 	if in.Query == "" {
 		return nil, fmt.Errorf("query is required")
 	}
@@ -444,14 +457,27 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 		limit = 10
 	}
 
+	// Resolve scope context. in.ProjectID overrides the header projectID if set.
+	effectiveProjectID := projectID
+	if in.ProjectID != "" {
+		effectiveProjectID = in.ProjectID
+	}
+	agentID := in.AgentID
+	orgID := in.OrgID
+
 	emb, err := t.embed.Embed(ctx, in.Query)
 	if err != nil {
 		return nil, fmt.Errorf("embedding failed: %w", err)
 	}
 	vec := pgvector.NewVector(emb)
 
+	// Build scope-aware WHERE clause.
+	args := []interface{}{vec}
+	scopeClause, args := scopeFilter(in.Scope, effectiveProjectID, agentID, orgID, args)
+	typeClause, args := chunkTypeFilter(in.ChunkType, args)
+	injectClause, args := alwaysInjectFilter(in.AlwaysInjectOnly, args)
+
 	// last_review_at: most recent review date, or updated_at if no reviews exist.
-	// Used to compute freshness decay — a recent review resets the staleness clock.
 	const searchCols = `cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
 			cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 			COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
@@ -463,21 +489,31 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 
 	var rows pgxRows
 	if in.QueryKey != "" {
-		rows, err = pool(t).Query(ctx, `
-			SELECT `+searchCols+`
+		args = append(args, in.QueryKey)
+		qkIdx := len(args)
+		args = append(args, limit)
+		limIdx := len(args)
+		query := fmt.Sprintf(`
+			SELECT %s
 			FROM context_chunks cc
-			WHERE cc.project_id = $2 AND cc.query_key = $3
+			WHERE cc.query_key = $%d
+			%s %s %s
 			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
-			LIMIT $4
-		`, vec, projectID, in.QueryKey, limit)
+			LIMIT $%d
+		`, searchCols, qkIdx, scopeClause, typeClause, injectClause, limIdx)
+		rows, err = pool(t).Query(ctx, query, args...)
 	} else {
-		rows, err = pool(t).Query(ctx, `
-			SELECT `+searchCols+`
+		args = append(args, limit)
+		limIdx := len(args)
+		query := fmt.Sprintf(`
+			SELECT %s
 			FROM context_chunks cc
-			WHERE cc.project_id = $2
+			WHERE TRUE
+			%s %s %s
 			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
-			LIMIT $3
-		`, vec, projectID, limit)
+			LIMIT $%d
+		`, searchCols, scopeClause, typeClause, injectClause, limIdx)
+		rows, err = pool(t).Query(ctx, query, args...)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("search query: %w", err)
@@ -529,16 +565,18 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 }
 
 func (t *Tools) ReadContext(ctx context.Context, projectID, id string) (*ReadContextResult, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project_id is required")
+	if id == "" {
+		return nil, fmt.Errorf("id is required")
 	}
+	// Scope-aware read: look up by chunk ID only. project_id is optional context
+	// for backward compatibility but NOT used as an access gate — chunk ID is globally unique.
 	row := pool(t).QueryRow(ctx, `
 		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
 		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
 		FROM context_chunks cc
-		WHERE cc.id = $1 AND cc.project_id = $2
-	`, id, projectID)
+		WHERE cc.id = $1
+	`, id)
 
 	chunk, currentVersion, err := scanChunkRow(row)
 	if err != nil {
@@ -581,10 +619,10 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 		return nil, fmt.Errorf("change_note is required")
 	}
 
-	// Fetch current chunk
+	// Fetch current chunk — scope-aware: look up by ID only (chunk IDs are globally unique).
 	row := pool(t).QueryRow(ctx, `
-		SELECT content FROM context_chunks WHERE id = $1 AND project_id = $2
-	`, in.ID, projectID)
+		SELECT content FROM context_chunks WHERE id = $1
+	`, in.ID)
 	var currentContentB []byte
 	if err := row.Scan(&currentContentB); err != nil {
 		return nil, fmt.Errorf("chunk not found: %w", err)
@@ -681,7 +719,7 @@ func (t *Tools) GetContextVersions(ctx context.Context, projectID, id string, li
 	}
 	// Verify ownership
 	var exists bool
-	_ = pool(t).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM context_chunks WHERE id = $1 AND project_id = $2)`, id, projectID).Scan(&exists)
+	_ = pool(t).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM context_chunks WHERE id = $1)`, id).Scan(&exists)
 	if !exists {
 		return nil, fmt.Errorf("chunk not found")
 	}
@@ -707,9 +745,6 @@ func (t *Tools) GetContextVersions(ctx context.Context, projectID, id string, li
 }
 
 func (t *Tools) CompactContext(ctx context.Context, projectID string, in CompactContextInput) (*CompactContextResult, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project_id is required")
-	}
 	if in.Query == "" {
 		return nil, fmt.Errorf("query is required")
 	}
@@ -718,22 +753,36 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 		limit = 50
 	}
 
+	effectiveProjectID := projectID
+	if in.ProjectID != "" {
+		effectiveProjectID = in.ProjectID
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Query)
 	if err != nil {
 		return nil, fmt.Errorf("embedding failed: %w", err)
 	}
 	vec := pgvector.NewVector(emb)
 
-	rows, err := pool(t).Query(ctx, `
+	args := []interface{}{vec}
+	scopeClause, args := scopeFilter(in.Scope, effectiveProjectID, in.AgentID, in.OrgID, args)
+	typeClause, args := chunkTypeFilter(in.ChunkType, args)
+	args = append(args, limit)
+	limIdx := len(args)
+
+	query := fmt.Sprintf(`
 		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
 		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
 		       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
 		FROM context_chunks cc
-		WHERE cc.project_id = $2
+		WHERE TRUE
+		%s %s
 		ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
-		LIMIT $3
-	`, vec, projectID, limit)
+		LIMIT $%d
+	`, scopeClause, typeClause, limIdx)
+
+	rows, err := pool(t).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -761,9 +810,9 @@ func (t *Tools) ReviewContext(ctx context.Context, projectID string, in ReviewCo
 		return nil, fmt.Errorf("usefulness and correctness must be 1-5")
 	}
 
-	// Verify chunk belongs to project
+	// Verify chunk exists (scope-aware: ID is globally unique, no project_id gate)
 	var exists bool
-	_ = pool(t).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM context_chunks WHERE id = $1 AND project_id = $2)`, in.ChunkID, projectID).Scan(&exists)
+	_ = pool(t).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM context_chunks WHERE id = $1)`, in.ChunkID).Scan(&exists)
 	if !exists {
 		return nil, fmt.Errorf("chunk not found")
 	}
@@ -788,10 +837,11 @@ func (t *Tools) ReviewContext(ctx context.Context, projectID string, in ReviewCo
 }
 
 func (t *Tools) DeleteContext(ctx context.Context, projectID, id string) (*DeleteContextResult, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project_id is required")
+	if id == "" {
+		return nil, fmt.Errorf("id is required")
 	}
-	result, err := pool(t).Exec(ctx, `DELETE FROM context_chunks WHERE id = $1 AND project_id = $2`, id, projectID)
+	// Scope-aware delete: chunk IDs are globally unique — no project_id gate needed.
+	result, err := pool(t).Exec(ctx, `DELETE FROM context_chunks WHERE id = $1`, id)
 	if err != nil {
 		return nil, fmt.Errorf("delete: %w", err)
 	}
@@ -1219,6 +1269,86 @@ func joinClauses(clauses []string) string {
 		result += c
 	}
 	return result
+}
+
+// scopeFilter builds a WHERE clause fragment and appends args for scope-aware
+// chunk queries. It respects the three-scope model:
+//
+//	PROJECT scope: chunks where cc.project_id = projectID
+//	AGENT scope:   chunks where cc.agent_id = agentID
+//	ORG scope:     chunks where cc.org_id = orgID (project_id IS NULL)
+//
+// If scope is empty, all accessible chunks across all scopes are returned.
+// Returns the clause fragment (starting with "AND") and the updated args slice.
+func scopeFilter(scope, projectID, agentID, orgID string, args []interface{}) (string, []interface{}) {
+	idx := func() int { return len(args) + 1 }
+
+	switch scope {
+	case "PROJECT":
+		if projectID == "" {
+			return "AND FALSE -- PROJECT scope requires project_id", args
+		}
+		args = append(args, projectID)
+		return fmt.Sprintf("AND cc.scope = 'PROJECT' AND cc.project_id = $%d", idx()), args
+
+	case "AGENT":
+		if agentID == "" {
+			return "AND FALSE -- AGENT scope requires agent_id", args
+		}
+		args = append(args, agentID)
+		return fmt.Sprintf("AND cc.scope = 'AGENT' AND cc.agent_id = $%d", idx()), args
+
+	case "ORG":
+		if orgID == "" {
+			return "AND FALSE -- ORG scope requires org_id", args
+		}
+		args = append(args, orgID)
+		return fmt.Sprintf("AND cc.scope = 'ORG' AND cc.org_id = $%d", idx()), args
+
+	default:
+		// No scope filter — return all accessible chunks across all scopes.
+		// Access rules: PROJECT chunks visible if project_id matches,
+		// AGENT chunks visible if agent_id matches,
+		// ORG chunks visible if org_id matches.
+		clauses := []string{"AND ("}
+		sub := []string{}
+		if projectID != "" {
+			args = append(args, projectID)
+			sub = append(sub, fmt.Sprintf("(cc.scope = 'PROJECT' AND cc.project_id = $%d)", len(args)))
+		}
+		if agentID != "" {
+			args = append(args, agentID)
+			sub = append(sub, fmt.Sprintf("(cc.scope = 'AGENT' AND cc.agent_id = $%d)", len(args)))
+		}
+		if orgID != "" {
+			args = append(args, orgID)
+			sub = append(sub, fmt.Sprintf("(cc.scope = 'ORG' AND cc.org_id = $%d)", len(args)))
+		}
+		if len(sub) == 0 {
+			// No scope context at all — fall back to project_id on chunk (legacy)
+			return "", args
+		}
+		_ = clauses
+		clause := "AND (" + strings.Join(sub, " OR ") + ")"
+		return clause, args
+	}
+}
+
+// chunkTypeFilter returns a WHERE clause fragment for chunk_type filtering.
+func chunkTypeFilter(chunkType string, args []interface{}) (string, []interface{}) {
+	if chunkType == "" {
+		return "", args
+	}
+	args = append(args, chunkType)
+	return fmt.Sprintf("AND cc.chunk_type = $%d", len(args)), args
+}
+
+// alwaysInjectFilter returns a WHERE clause fragment for always_inject filtering.
+func alwaysInjectFilter(onlyAlwaysInject bool, args []interface{}) (string, []interface{}) {
+	if !onlyAlwaysInject {
+		return "", args
+	}
+	return "AND cc.always_inject = TRUE", args
 }
 
 // pgxRows is an alias for the pgx rows interface used in queries.
