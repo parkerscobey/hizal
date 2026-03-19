@@ -1,153 +1,96 @@
-# CLAUDE.md — Winnow (Contextor) Codebase Guide
+# CLAUDE.md — Winnow Development Guide
 
 ## What is This?
-Winnow is a context management API for AI agents. It stores semantic context chunks with vector embeddings, enabling agents to search, retrieve, version, and maintain a persistent knowledge base across sessions.
 
-**Live:** https://winnow-api.xferops.dev (API) | https://winnow.xferops.dev (UI)
+Winnow is a behavior-driven memory API for AI agents. Go backend with PostgreSQL + pgvector for semantic search, MCP server over HTTP+SSE for agent tooling.
 
 ## Quick Start
 
 ```bash
-# Run locally
-make dev
-
-# Run tests
+cp .env.example .env   # configure DATABASE_URL + OPENAI_API_KEY
+make migrate
+make dev               # starts on :8080
 make test
-
-# Build
-make build
 ```
 
 ## Project Structure
+
 ```
-cmd/         — entrypoints (server, etc.)
-internal/    — core business logic
-  context/   — context CRUD, embeddings, versioning
-  search/    — vector search implementation
-  auth/      — API key validation
-server/      — HTTP handlers, MCP server
-docs/        — API documentation
+cmd/server/          — Server entrypoint
+internal/
+  api/               — HTTP handlers, middleware, CORS, onboarding guide
+  auth/              — API key generation, validation, scoping
+  db/                — Database connection, migrations
+  embeddings/        — OpenAI embedding client (text-embedding-3-small)
+  email/             — Email templates and sending
+  mcp/               — MCP server (HTTP+SSE transport, all tool handlers)
+  models/            — Database-backed types (canonical package)
+  seed/              — Auto-seeding from GitHub repos
+skills/              — Agent skill definitions (SKILL.md files)
+docs/                — Documentation
 ```
 
-## MCP Server Setup
-Winnow exposes an MCP server for agent tooling. To configure:
-```json
-{
-  "mcpServers": {
-    "winnow": {
-      "url": "https://winnow-api.xferops.dev/mcp",
-      "headers": { "Authorization": "Bearer dk_live_YOUR_KEY_HERE" }
-    }
-  }
-}
-```
+## Key Architecture Decisions
 
-## Available MCP Tools
+- **No server-side LLM** — All summarization happens client-side
+- **pgvector** — Semantic search with text-embedding-3-small embeddings
+- **Three scopes** — PROJECT (shared), AGENT (private), ORG (org-wide)
+- **always_inject** — Chunks surfaced automatically as ambient context
+- **Purpose-built write tools** — Tool name communicates intent, routes to correct scope
+- **Session lifecycle** — start_session / register_focus / end_session
+- **Agent types** — dev, admin, research, orchestrator (controls tool visibility)
+- **Chunk types** — KNOWLEDGE, MEMORY, CONVENTION, IDENTITY, PRINCIPLE, DECISION, RESEARCH, PLAN, SPEC, IMPLEMENTATION, CONSTRAINT, LESSON
 
-| Tool | Description |
-|------|-------------|
-| `write_context` | Store a new context chunk with embedding |
-| `search_context` | Semantic vector search over chunks |
-| `read_context` | Fetch a chunk by ID |
-| `update_context` | Update chunk content (creates new version) |
-| `get_context_versions` | View full version history of a chunk |
-| `compact_context` | Bulk-fetch chunks for summarization |
-| `review_context` | Rate a chunk's usefulness/correctness (1–5) |
-| `delete_context` | Remove a chunk permanently |
+## MCP Tools (implemented in internal/mcp/server.go)
 
-## Agent Workflow Patterns
+### Session lifecycle
+`start_session`, `resume_session`, `get_active_session`, `register_focus`, `end_session`
 
-### Research Workflow (`skills/winnow-research/`)
-Search before you write. Never create duplicate chunks.
-```
-search_context → read top results → gather new info → write_context
-```
+### Purpose-built writes
+`write_identity` (AGENT, always_inject), `write_memory` (AGENT), `write_knowledge` (PROJECT), `write_convention` (PROJECT, always_inject), `write_org_knowledge` (ORG), `store_principle` (ORG, always_inject)
 
-### Compaction Workflow (`skills/winnow-compact/`)
-Merge related/redundant chunks into one high-quality summary.
-```
-search_context → compact_context → summarize → write_context → delete/update originals
-```
+### Read/search
+`search_context`, `read_context`, `get_context_versions`, `compact_context`
 
-### Onboarding Workflow (`skills/winnow-onboard/`)
-Build a mental model from Winnow before touching code.
-```
-search overview → read key chunks → explore domains → synthesize mental model
-```
+### Other
+`update_context`, `delete_context`, `review_context`, `write_context` (deprecated)
 
-### Planning Workflow (`skills/winnow-plan/`)
-Review context, write a plan, save it, update as work evolves.
-```
-search constraints/decisions → draft plan → validate → write_context → update as needed
-```
+### Admin (orchestrator/admin types only)
+`list_projects`, `list_agents`, `create_project`, `add_agent_to_project`, `remove_agent_from_project`
 
-### Review Workflow (`skills/winnow-review/`)
-Audit chunk quality and remove stale/incorrect context.
-```
-search topic → read chunks → review_context(rating) → update/delete low-quality chunks
-```
+## Database Model Contract
+
+- `internal/models` is the canonical package for database-backed types
+- Every table/column in migrations must be reflected in `internal/models`
+- Scan rows into `internal/models` types first
+- Keep transport/join structs local to the serving package
 
 ## Coding Conventions
 
-### API Keys
-- Format: `dk_live_{org}_{random}` (prod) or `dk_test_{org}_{random}` (test)
-- Never hardcode — use `WINNOW_API_KEY` env var
-- Project scoping: all operations require `projectId`
+- Standard Go style (`gofmt`, `go vet`)
+- Error messages lowercase and descriptive
+- All schema changes via `internal/db/migrations/` (sequential numbering, up + down)
+- API key format: `ctx_{org}_{random}`
+- All context operations require project/agent/org scoping
+- Tests use `go test ./...`
 
-### Context Chunks
-- **Size:** 100–600 words per chunk
-- **Tags:** Always include at minimum `[type, topic]` — e.g., `["research", "auth"]`
-- **Source:** Include URL or file path for traceability
-- **Focus:** One concept per chunk
+## Common Patterns
 
-### Tag Conventions
-```
-research      — gathered information, findings
-plan          — task or feature plans
-decision      — architectural or design decisions
-convention    — coding standards, patterns, style
-onboarding    — project overview and mental model docs
-compacted     — merged/summarized from multiple chunks
-```
-
-### Go Patterns
 ```go
-// Use context.Context for all API calls
-result, err := client.SearchContext(ctx, &SearchRequest{
-    ProjectID: cfg.ProjectID,
-    Query:     query,
-    Limit:     10,
-})
-if err != nil {
-    return fmt.Errorf("search_context: %w", err)
-}
-
 // Check for existing chunk before writing
-if len(result.Chunks) > 0 && result.Chunks[0].Score > 0.85 {
-    // Update existing chunk instead
-    return client.UpdateContext(ctx, result.Chunks[0].ID, newContent)
+results := searchContext(ctx, query, projectID)
+if len(results) > 0 && results[0].Score > 0.85 {
+    // Update existing instead of creating duplicate
+    updateContext(ctx, results[0].ID, newContent)
 }
 ```
 
-## Testing
-- Use `dk_test_*` keys for all tests
-- Test project IDs start with `test_`
-- Run against local server or staging — never prod
+## Skills
 
-## Common Mistakes to Avoid
-1. **Writing without searching first** — always check for existing chunks
-2. **Hardcoding project IDs** — use config/env vars
-3. **Giant chunks** — keep them focused and under 600 words
-4. **No tags** — untagged chunks are hard to find later
-5. **Never reviewing** — stale context degrades agent performance
-
-## Skills (OpenClaw)
-Agent skill packages live in `skills/`. Each has a `SKILL.md` with full workflow instructions:
-- `skills/winnow-research/` — research + write
-- `skills/winnow-compact/` — merge + clean up
-- `skills/winnow-onboard/` — project onboarding
-- `skills/winnow-plan/` — task planning
-- `skills/winnow-review/` — quality review
-
-## Cursor Rules
-Cursor-specific rules in `.cursor/rules/winnow.mdc`.
+Agent workflow packages in `skills/`:
+- `winnow-seed` — populate empty projects
+- `winnow-research` — investigate + write knowledge
+- `winnow-plan` — create validated implementation plans
+- `winnow-compact` — compress noisy context
+- `winnow-review` — rate and improve quality
+- `winnow-onboard` — fast project orientation

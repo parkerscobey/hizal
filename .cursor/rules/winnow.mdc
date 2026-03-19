@@ -1,126 +1,66 @@
 ---
-description: Rules for using Winnow (context management API) in this codebase
+description: Rules for working on the Winnow codebase (Go API + MCP server)
 globs: ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.md"]
 ---
 
-# Winnow Context Management Rules
+# Winnow Development Rules
 
 ## What is Winnow?
-Winnow is a semantic context store for AI agents. It stores, searches, and versions knowledge chunks using vector embeddings. Use it to persist findings, plans, and decisions so they survive across sessions.
+Winnow is behavior-driven memory infrastructure for AI agents. Go API with PostgreSQL + pgvector for semantic search, MCP server over HTTP+SSE.
 
-## MCP Configuration
-Add to your MCP config (`~/.cursor/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "winnow": {
-      "url": "https://winnow-api.xferops.dev/mcp",
-      "headers": { "Authorization": "Bearer dk_live_YOUR_KEY_HERE" }
-    }
-  }
-}
+## Core Architecture
+
+- **Three scopes:** PROJECT (shared), AGENT (private), ORG (org-wide)
+- **always_inject:** Chunks surfaced automatically as ambient context
+- **Purpose-built write tools:** write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle
+- **Session lifecycle:** start_session → register_focus → work → end_session
+- **No server-side LLM** — agents do all reasoning client-side
+
+## Key Packages
+
+- `internal/models` — canonical database-backed types (always scan rows here first)
+- `internal/mcp/server.go` — MCP tool schemas and handlers
+- `internal/api/` — HTTP handlers, middleware, CORS
+- `internal/auth/` — API key generation, validation, scoping
+- `internal/db/migrations/` — sequential migrations (up + down)
+- `internal/embeddings/` — OpenAI text-embedding-3-small client
+
+## API Key Format
 ```
-
-## Core Tools
-
-| Tool | Purpose |
-|------|---------|
-| `search_context` | Semantic search — always run this first |
-| `read_context` | Fetch a chunk by ID |
-| `write_context` | Store a new chunk with embedding |
-| `update_context` | Update a chunk (creates new version) |
-| `get_context_versions` | View version history of a chunk |
-| `compact_context` | Fetch many chunks for summarization |
-| `review_context` | Rate a chunk's quality (1-5) |
-| `delete_context` | Remove a chunk |
-
-## Coding Conventions
-
-### API Key Format
+ctx_{org-slug}_{random}
 ```
-dk_live_{org}_{random}   — production
-dk_test_{org}_{random}   — testing
-```
-dNever hardcode API keys. Use env vars: `WINNOW_API_KEY`.
+Never hardcode keys. Use `WINNOW_API_KEY` env var.
 
-### Go API Patterns
-```go
-// Always pass projectID from config, never hardcode
-ctx := context.Background()
-result, err := client.SearchContext(ctx, &winnow.SearchRequest{
-    ProjectID: cfg.ProjectID,
-    Query:     "search query",
-    Limit:     10,
-})
-```
+## MCP Tools (all in internal/mcp/server.go)
 
-### REST Endpoints
-```
-POST   /api/context              — write_context
-GET    /api/context/:id          — read_context
-PUT    /api/context/:id          — update_context
-DELETE /api/context/:id          — delete_context
-GET    /api/context/:id/versions — get_context_versions
-POST   /api/context/search       — search_context
-POST   /api/context/compact      — compact_context
-POST   /api/context/:id/review   — review_context
-```
+### Session
+start_session, resume_session, get_active_session, register_focus, end_session
 
-## Workflow Rules
+### Writes
+write_identity (AGENT, always_inject), write_memory (AGENT), write_knowledge (PROJECT), write_convention (PROJECT, always_inject), write_org_knowledge (ORG), store_principle (ORG, always_inject, requires promoted_by_user_id)
 
-### Before writing new context
-1. ALWAYS `search_context` first with the topic
-2. If a relevant chunk exists, `update_context` instead of creating a duplicate
-3. One concept per chunk — don't pack unrelated topics together
+### Reads
+search_context, read_context, get_context_versions, compact_context
 
-### Tagging conventions
-```
-["research", "<topic>"]        — research findings
-["plan", "<feature>", "<milestone>"]  — plans
-["decision", "<area>"]         — architectural decisions
-["onboarding", "overview"]     — onboarding/overview docs
-["compacted", "<topic>"]       — merged/summarized chunks
-["convention", "<area>"]       — coding standards, patterns
-```
+### Other
+update_context, delete_context, review_context, write_context (deprecated)
 
-### Chunk quality guidelines
-- **Size:** 100–600 words per chunk
-- **Focus:** One concept, one decision, one research finding
-- **Source:** Always include source URL or file path when available
-- **Tags:** Minimum 2 tags — topic + type
+### Admin
+list_projects, list_agents, create_project, add_agent_to_project, remove_agent_from_project
 
-### Context hygiene
-- Review chunks periodically (`winnow-review` workflow)
-- Compact related chunks after sprints (`winnow-compact` workflow)
-- Delete superseded chunks — don't let the store go stale
+## Coding Rules
 
-## Workflow Shortcuts
+- Standard Go (`gofmt`, `go vet`)
+- All schema changes via `internal/db/migrations/`
+- Every new table/column reflected in `internal/models`
+- Error messages lowercase and descriptive
+- Search before writing — no duplicate chunks
+- Update `docs/03-mcp-tools.md` when changing tool schemas
+- Update `internal/api/agent_onboarding_guide.go` if it affects onboarding
+- Tests: `go test ./...`
 
-### Research a topic
-```
-d1. search_context(query="<topic>", limit=5)
-2. read_context(<top result IDs>)
-3. <gather new info if needed>
-4. write_context(<new findings>)
-```
+## Chunk Types
+KNOWLEDGE, MEMORY, CONVENTION, IDENTITY, PRINCIPLE, DECISION, RESEARCH, PLAN, SPEC, IMPLEMENTATION, CONSTRAINT, LESSON
 
-### Start a task
-```
-1. search_context(query="<task area>", limit=5)
-2. search_context(query="conventions patterns", limit=3)
-3. Build mental model from results
-4. Plan the work, save plan with write_context
-```
-
-### End of session
-```
-1. write_context(<summary of what was done>)
-2. Tag with session date and feature area
-```
-
-## Testing
-Use `dk_test_*` keys against staging:
-```
-https://winnow-api.xferops.dev  (shared staging)
-```
-Never use production keys in tests.
+## Agent Types (control tool visibility)
+dev, admin, research, orchestrator

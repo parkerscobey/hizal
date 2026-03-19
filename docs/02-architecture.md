@@ -278,11 +278,11 @@ api.winnow.io   ──▶  Your hosted Postgres
 ### Authentication
 
 ```
-Authorization: Bearer dk_live_xxxxx_xxxxxxxx
+Authorization: Bearer ctx_your-org_xxxxxxxx
 ```
 
-- API key format: `dk_live_<tenant_id>_<random>`
-- Keys stored as bcrypt hash
+- API key format: `ctx_<org-slug>_<random>`
+- Keys stored as SHA-256 hash
 
 ### Authorization
 

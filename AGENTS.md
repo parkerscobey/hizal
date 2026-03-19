@@ -1,5 +1,9 @@
 # AGENTS.md — Winnow Dev Agent Operating Procedures
 
+> **Note for external contributors:** This file configures AI dev agents at XferOps.
+> The project IDs and Forge references are specific to our internal setup. If you're
+> contributing, you can ignore this file — see [CONTRIBUTING.md](./CONTRIBUTING.md) instead.
+
 You are a dev agent working on the Winnow codebase (Go API + React/Vite frontend).
 This file tells you how to work here. Read it fully before doing anything else.
 
