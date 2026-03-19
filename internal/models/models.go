@@ -199,12 +199,14 @@ type UsageSnapshot struct {
 
 // AgentTypeFilterConfig represents JSONB filters for inject/search behavior.
 type AgentTypeFilterConfig struct {
-	IncludeScopes               []string `json:"include_scopes,omitempty"`
-	ExcludeScopes               []string `json:"exclude_scopes,omitempty"`
-	IncludeChunkTypes           []string `json:"include_chunk_types,omitempty"`
-	ExcludeChunkTypes           []string `json:"exclude_chunk_types,omitempty"`
-	ExcludeQueryKeyPrefixes     []string `json:"exclude_query_key_prefixes,omitempty"`
-	OrgSearchRequiresExplicitScope bool `json:"org_search_requires_explicit_scope,omitempty"`
+	IncludeScopes                  []string `json:"include_scopes,omitempty"`
+	ExcludeScopes                  []string `json:"exclude_scopes,omitempty"`
+	IncludeChunkTypes              []string `json:"include_chunk_types,omitempty"`
+	ExcludeChunkTypes              []string `json:"exclude_chunk_types,omitempty"`
+	ExcludeQueryKeyPrefixes        []string `json:"exclude_query_key_prefixes,omitempty"`
+	OrgSearchRequiresExplicitScope bool     `json:"org_search_requires_explicit_scope,omitempty"`
+	ExcludeQueryKeys               []string `json:"exclude_query_keys,omitempty"`
+	MaxInjectTokens                int      `json:"max_inject_tokens,omitempty"`
 }
 
 // AgentType represents a row in the agent_types table.
@@ -225,16 +227,16 @@ type AgentType struct {
 // ChunkType represents a row in the chunk_types table.
 // org_id = NULL means a global preset. Global presets are immutable.
 type ChunkType struct {
-	ID                     string    `json:"id" db:"id"`
-	OrgID                  *string   `json:"org_id,omitempty" db:"org_id"`
-	Name                   string    `json:"name" db:"name"`
-	Slug                   string    `json:"slug" db:"slug"`
-	Description            *string   `json:"description,omitempty" db:"description"`
-	DefaultScope           string    `json:"default_scope" db:"default_scope"`
-	DefaultAlwaysInject    bool      `json:"default_always_inject" db:"default_always_inject"`
-	ConsolidationBehavior  string    `json:"consolidation_behavior" db:"consolidation_behavior"`
-	CreatedAt              time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at" db:"updated_at"`
+	ID                    string    `json:"id" db:"id"`
+	OrgID                 *string   `json:"org_id,omitempty" db:"org_id"`
+	Name                  string    `json:"name" db:"name"`
+	Slug                  string    `json:"slug" db:"slug"`
+	Description           *string   `json:"description,omitempty" db:"description"`
+	DefaultScope          string    `json:"default_scope" db:"default_scope"`
+	DefaultAlwaysInject   bool      `json:"default_always_inject" db:"default_always_inject"`
+	ConsolidationBehavior string    `json:"consolidation_behavior" db:"consolidation_behavior"`
+	CreatedAt             time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // SessionLifecycle represents a row in the session_lifecycles table.

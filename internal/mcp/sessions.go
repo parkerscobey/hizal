@@ -14,26 +14,27 @@ import (
 
 type StartSessionInput struct {
 	// AgentID is resolved from the API key — not required from the caller.
-	AgentID      string  `json:"-"`
-	ProjectID    *string `json:"project_id,omitempty"`
+	AgentID       string  `json:"-"`
+	ProjectID     *string `json:"project_id,omitempty"`
 	LifecycleSlug *string `json:"lifecycle_slug,omitempty"` // defaults to "default"
 }
 
 type StartSessionResult struct {
-	SessionID      string                `json:"session_id"`
-	ExpiresAt      time.Time             `json:"expires_at"`
-	Lifecycle      string                `json:"lifecycle"`
-	RequiredSteps  []string              `json:"required_steps"`
-	InjectedChunks []InjectedChunk       `json:"injected_chunks"`
-	TruncatedCount int                   `json:"truncated_count,omitempty"`
+	SessionID      string          `json:"session_id"`
+	ExpiresAt      time.Time       `json:"expires_at"`
+	Lifecycle      string          `json:"lifecycle"`
+	RequiredSteps  []string        `json:"required_steps"`
+	InjectedChunks []InjectedChunk `json:"injected_chunks"`
+	TruncatedCount int             `json:"truncated_count,omitempty"`
 }
 
 type InjectedChunk struct {
-	ID       string `json:"id"`
-	QueryKey string `json:"query_key"`
-	Title    string `json:"title"`
-	Content  string `json:"content"`
-	Scope    string `json:"scope"`
+	ID        string `json:"id"`
+	QueryKey  string `json:"query_key"`
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	Scope     string `json:"scope"`
+	ChunkType string `json:"chunk_type"`
 }
 
 type ResumeSessionInput struct {
@@ -64,9 +65,9 @@ type EndSessionInput struct {
 }
 
 type EndSessionResult struct {
-	SessionID     string              `json:"session_id"`
-	ChunksWritten int                 `json:"chunks_written"`
-	ChunksRead    int                 `json:"chunks_read"`
+	SessionID     string                `json:"session_id"`
+	ChunksWritten int                   `json:"chunks_written"`
+	ChunksRead    int                   `json:"chunks_read"`
 	WriteChunks   []SessionChunkSummary `json:"write_chunks"` // chunks written during session for consolidation review
 }
 
@@ -120,22 +121,74 @@ func parseLifecycleConfig(lc *models.SessionLifecycle) (models.SessionLifecycleC
 	return cfg, nil
 }
 
-// fetchAlwaysInjectChunks returns always_inject=true chunks for the given session,
-// filtered to the scopes specified in the lifecycle config.
-func (t *Tools) fetchAlwaysInjectChunks(ctx context.Context, agentID string, projectID *string, orgID string, scopes []string) ([]InjectedChunk, error) {
+func intersectScopes(a, b []string) []string {
+	set := make(map[string]bool)
+	for _, s := range b {
+		set[s] = true
+	}
+	var result []string
+	for _, s := range a {
+		if set[s] {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+func (t *Tools) resolveAgentInjectFilters(ctx context.Context, agentID string) models.AgentTypeFilterConfig {
+	var rawFilters []byte
+	err := t.pool.QueryRow(ctx, `
+		SELECT COALESCE(at.inject_filters, '{}')
+		FROM agents a
+		LEFT JOIN agent_types at ON at.id = a.type_id
+		WHERE a.id = $1
+	`, agentID).Scan(&rawFilters)
+	if err != nil {
+		return models.AgentTypeFilterConfig{}
+	}
+	var filters models.AgentTypeFilterConfig
+	if err := json.Unmarshal(rawFilters, &filters); err != nil {
+		return models.AgentTypeFilterConfig{}
+	}
+	return filters
+}
+
+func (t *Tools) fetchAlwaysInjectChunks(
+	ctx context.Context,
+	agentID string,
+	projectID *string,
+	orgID string,
+	scopes []string,
+	includeChunkTypes []string,
+	excludeChunkTypes []string,
+	excludeQueryKeys []string,
+	maxInjectTokens int,
+) ([]InjectedChunk, int, error) {
 	args := []any{agentID, orgID, scopes}
-	projectFilter := "AND (cc.scope != 'PROJECT')" // no project scope if no project
+	projectFilter := "AND (cc.scope != 'PROJECT')"
 	if projectID != nil {
 		args = append(args, *projectID)
 		projectFilter = fmt.Sprintf("AND (cc.scope != 'PROJECT' OR cc.project_id = $%d)", len(args))
 	}
 
+	chunkTypeFilter := ""
+	if len(includeChunkTypes) > 0 {
+		args = append(args, includeChunkTypes)
+		chunkTypeFilter = fmt.Sprintf(" AND cc.chunk_type = ANY($%d)", len(args))
+	}
+
+	queryKeyFilter := ""
+	if len(excludeQueryKeys) > 0 {
+		args = append(args, excludeQueryKeys)
+		queryKeyFilter = fmt.Sprintf(" AND cc.query_key != ALL($%d)", len(args))
+	}
+
 	query := fmt.Sprintf(`
-		SELECT cc.id, cc.query_key, cc.title, cc.content, cc.scope
+		SELECT cc.id, cc.query_key, cc.title, cc.content, cc.scope, cc.chunk_type
 		FROM context_chunks cc
 		WHERE cc.always_inject = TRUE
 		  AND cc.scope = ANY($3)
-		  %s
+		  %s%s%s
 		  AND (
 		    (cc.scope = 'AGENT' AND cc.agent_id = $1)
 		    OR (cc.scope = 'ORG' AND cc.project_id IS NULL AND EXISTS (
@@ -145,11 +198,11 @@ func (t *Tools) fetchAlwaysInjectChunks(ctx context.Context, agentID string, pro
 		ORDER BY
 		  CASE cc.scope WHEN 'AGENT' THEN 1 WHEN 'ORG' THEN 2 WHEN 'PROJECT' THEN 3 END,
 		  cc.updated_at DESC
-	`, projectFilter)
+	`, projectFilter, chunkTypeFilter, queryKeyFilter)
 
 	rows, err := t.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("fetchAlwaysInjectChunks: %w", err)
+		return nil, 0, fmt.Errorf("fetchAlwaysInjectChunks: %w", err)
 	}
 	defer rows.Close()
 
@@ -157,13 +210,35 @@ func (t *Tools) fetchAlwaysInjectChunks(ctx context.Context, agentID string, pro
 	for rows.Next() {
 		var c InjectedChunk
 		var rawContent []byte
-		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &rawContent, &c.Scope); err != nil {
-			return nil, err
+		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &rawContent, &c.Scope, &c.ChunkType); err != nil {
+			return nil, 0, err
 		}
 		c.Content = decodeContent(rawContent)
 		chunks = append(chunks, c)
 	}
-	return chunks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	truncated := 0
+	if maxInjectTokens > 0 {
+		var kept []InjectedChunk
+		var discarded []InjectedChunk
+		runningTokens := 0
+		for _, chunk := range chunks {
+			estTokens := len(chunk.Content) / 4
+			if runningTokens+estTokens <= maxInjectTokens {
+				kept = append(kept, chunk)
+				runningTokens += estTokens
+			} else {
+				discarded = append(discarded, chunk)
+			}
+		}
+		truncated = len(discarded)
+		chunks = kept
+	}
+
+	return chunks, truncated, nil
 }
 
 // ---- Tool Implementations ----
@@ -186,14 +261,13 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := parseLifecycleConfig(lc)
+	lcCfg, err := parseLifecycleConfig(lc)
 	if err != nil {
 		return nil, err
 	}
 
-	expiresAt := time.Now().Add(time.Duration(cfg.TTLHours) * time.Hour)
+	expiresAt := time.Now().Add(time.Duration(lcCfg.TTLHours) * time.Hour)
 
-	// Insert session — the partial unique index will reject a duplicate active session.
 	var sessionID string
 	err = t.pool.QueryRow(ctx, `
 		INSERT INTO sessions (agent_id, project_id, org_id, lifecycle_id, status, expires_at)
@@ -201,23 +275,37 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		RETURNING id
 	`, in.AgentID, in.ProjectID, orgID, lc.ID, expiresAt).Scan(&sessionID)
 	if err != nil {
-		// Unique constraint violation = already has an active session.
 		return nil, fmt.Errorf("agent already has an active session — call resume_session instead: %w", err)
 	}
 
-	// Fetch always_inject chunks.
-	chunks, err := t.fetchAlwaysInjectChunks(ctx, in.AgentID, in.ProjectID, orgID, cfg.InjectScopes)
+	typeFilters := t.resolveAgentInjectFilters(ctx, agentID)
+	scopes := lcCfg.InjectScopes
+	if len(typeFilters.IncludeScopes) > 0 {
+		scopes = intersectScopes(scopes, typeFilters.IncludeScopes)
+	}
+
+	chunks, truncated, err := t.fetchAlwaysInjectChunks(
+		ctx, in.AgentID, in.ProjectID, orgID, scopes,
+		typeFilters.IncludeChunkTypes,
+		typeFilters.ExcludeChunkTypes,
+		typeFilters.ExcludeQueryKeys,
+		typeFilters.MaxInjectTokens,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &StartSessionResult{
+	result := &StartSessionResult{
 		SessionID:      sessionID,
 		ExpiresAt:      expiresAt,
 		Lifecycle:      lc.Slug,
-		RequiredSteps:  cfg.RequiredSteps,
+		RequiredSteps:  lcCfg.RequiredSteps,
 		InjectedChunks: chunks,
-	}, nil
+	}
+	if truncated > 0 {
+		result.TruncatedCount = truncated
+	}
+	return result, nil
 }
 
 // ResumeSession extends an existing active session's TTL and re-injects
@@ -231,7 +319,6 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 	// Fetch session + lifecycle in one query.
 	var sess models.Session
 	var lcConfig []byte
-	var lcScopes []byte // we'll parse from config
 	err := t.pool.QueryRow(ctx, `
 		SELECT s.id, s.agent_id, s.project_id, s.org_id, s.lifecycle_id,
 		       s.status, s.focus_task, s.chunks_written, s.chunks_read,
@@ -258,8 +345,6 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		return nil, fmt.Errorf("session is %s — cannot resume", sess.Status)
 	}
 
-	_ = lcScopes // suppress unused
-
 	var cfg models.SessionLifecycleConfig
 	if err := json.Unmarshal(lcConfig, &cfg); err != nil {
 		cfg.TTLHours = 8
@@ -283,8 +368,19 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		return nil, fmt.Errorf("ResumeSession update: %w", err)
 	}
 
-	// Re-inject always_inject chunks fresh.
-	chunks, err := t.fetchAlwaysInjectChunks(ctx, sess.AgentID, sess.ProjectID, orgID, cfg.InjectScopes)
+	typeFilters := t.resolveAgentInjectFilters(ctx, sess.AgentID)
+	scopes := cfg.InjectScopes
+	if len(typeFilters.IncludeScopes) > 0 {
+		scopes = intersectScopes(scopes, typeFilters.IncludeScopes)
+	}
+
+	chunks, _, err := t.fetchAlwaysInjectChunks(
+		ctx, sess.AgentID, sess.ProjectID, orgID, scopes,
+		typeFilters.IncludeChunkTypes,
+		typeFilters.ExcludeChunkTypes,
+		typeFilters.ExcludeQueryKeys,
+		0,
+	)
 	if err != nil {
 		return nil, err
 	}

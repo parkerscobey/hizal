@@ -53,14 +53,13 @@ func TestParseLifecycleConfig_Invalid(t *testing.T) {
 }
 
 func TestStartSessionResult_Fields(t *testing.T) {
-	// Validate StartSessionResult struct fields are populated correctly.
 	r := &StartSessionResult{
-		SessionID:      "sess-123",
-		ExpiresAt:      time.Now().Add(8 * time.Hour),
-		Lifecycle:      "default",
-		RequiredSteps:  []string{},
+		SessionID:     "sess-123",
+		ExpiresAt:     time.Now().Add(8 * time.Hour),
+		Lifecycle:     "default",
+		RequiredSteps: []string{},
 		InjectedChunks: []InjectedChunk{
-			{ID: "c1", QueryKey: "identity", Title: "Agent Identity", Content: "I am...", Scope: "AGENT"},
+			{ID: "c1", QueryKey: "identity", Title: "Agent Identity", Content: "I am...", Scope: "AGENT", ChunkType: "IDENTITY"},
 		},
 	}
 	if r.SessionID != "sess-123" {
@@ -74,6 +73,9 @@ func TestStartSessionResult_Fields(t *testing.T) {
 	}
 	if r.InjectedChunks[0].Scope != "AGENT" {
 		t.Errorf("InjectedChunks[0].Scope = %q, want AGENT", r.InjectedChunks[0].Scope)
+	}
+	if r.InjectedChunks[0].ChunkType != "IDENTITY" {
+		t.Errorf("InjectedChunks[0].ChunkType = %q, want IDENTITY", r.InjectedChunks[0].ChunkType)
 	}
 }
 
@@ -114,5 +116,37 @@ func TestInjectedChunkOrder(t *testing.T) {
 		if s.order != i+1 {
 			t.Errorf("scope %q order = %d, want %d", s.scope, s.order, i+1)
 		}
+	}
+}
+
+func TestIntersectScopes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		a    []string
+		b    []string
+		want []string
+	}{
+		{"both empty", []string{}, []string{}, []string{}},
+		{"a empty", []string{}, []string{"AGENT", "ORG"}, []string{}},
+		{"b empty", []string{"AGENT", "ORG"}, []string{}, []string{}},
+		{"full overlap", []string{"AGENT", "ORG", "PROJECT"}, []string{"AGENT", "ORG"}, []string{"AGENT", "ORG"}},
+		{"partial overlap", []string{"AGENT", "ORG"}, []string{"ORG", "PROJECT"}, []string{"ORG"}},
+		{"no overlap", []string{"AGENT"}, []string{"PROJECT"}, []string{}},
+		{"preserves order from a", []string{"PROJECT", "AGENT", "ORG"}, []string{"AGENT", "ORG"}, []string{"AGENT", "ORG"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := intersectScopes(tt.a, tt.b)
+			if len(got) != len(tt.want) {
+				t.Errorf("intersectScopes(%v, %v) len = %d, want %d", tt.a, tt.b, len(got), len(tt.want))
+				return
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("intersectScopes(%v, %v)[%d] = %q, want %q", tt.a, tt.b, i, got[i], tt.want[i])
+				}
+			}
+		})
 	}
 }
