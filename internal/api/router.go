@@ -49,6 +49,10 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		seedH = NewSeedHandlers(pool, mcpServer.Tools())
 	}
 	billingH := NewBillingHandlers(pool)
+	var sessionH *SessionHandlers
+	if pool != nil && h != nil {
+		sessionH = NewSessionHandlers(mcpServer.Tools(), pool)
+	}
 	// Stripe webhook — no JWT auth, verified by Stripe-Signature header
 	r.Post("/v1/webhooks/stripe", billingH.HandleWebhook)
 
@@ -138,6 +142,18 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		// API keys
 		r.Get("/v1/keys", keyH.ListKeys)
 		r.Delete("/v1/keys/{id}", keyH.DeleteKey)
+
+		// Sessions
+		if sessionH != nil {
+			r.Post("/v1/sessions", sessionH.StartSession)
+			r.Post("/v1/sessions/{id}/resume", sessionH.ResumeSession)
+			r.Post("/v1/sessions/{id}/focus", sessionH.RegisterFocus)
+			r.Post("/v1/sessions/{id}/end", sessionH.EndSession)
+			r.Get("/v1/sessions/{id}/memory-chunks", sessionH.GetSessionMemoryChunks)
+			r.Post("/v1/sessions/{id}/consolidate", sessionH.ConsolidateSession)
+			r.Get("/v1/orgs/{id}/sessions", sessionH.ListSessions)
+			r.Get("/v1/orgs/{id}/session-lifecycles", sessionH.ListSessionLifecycles)
+		}
 	})
 
 	// MCP endpoint (requires API key auth). POST serves JSON-RPC requests directly,

@@ -66,13 +66,20 @@ func (h *Handlers) WriteContext(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /v1/context/search
+// Scope params: ?scope=PROJECT|AGENT|ORG &agent_id=&org_id=&chunk_type=&always_inject_only=true
 func (h *Handlers) SearchContext(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
+	alwaysInjectOnly := q.Get("always_inject_only") == "true"
 	in := mcp.SearchContextInput{
-		Query:    q.Get("query"),
-		Limit:    limit,
-		QueryKey: q.Get("query_key"),
+		Query:            q.Get("query"),
+		Limit:            limit,
+		QueryKey:         q.Get("query_key"),
+		Scope:            q.Get("scope"),
+		AgentID:          q.Get("agent_id"),
+		OrgID:            q.Get("org_id"),
+		ChunkType:        q.Get("chunk_type"),
+		AlwaysInjectOnly: alwaysInjectOnly,
 	}
 	result, err := h.tools.SearchContext(r.Context(), projectID(r), in)
 	if err != nil {
@@ -83,12 +90,17 @@ func (h *Handlers) SearchContext(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /v1/context/compact
+// Scope params: ?scope=PROJECT|AGENT|ORG &agent_id=&org_id=&chunk_type=
 func (h *Handlers) CompactContext(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	in := mcp.CompactContextInput{
-		Query: q.Get("query"),
-		Limit: limit,
+		Query:     q.Get("query"),
+		Limit:     limit,
+		Scope:     q.Get("scope"),
+		AgentID:   q.Get("agent_id"),
+		OrgID:     q.Get("org_id"),
+		ChunkType: q.Get("chunk_type"),
 	}
 	result, err := h.tools.CompactContext(r.Context(), projectID(r), in)
 	if err != nil {
