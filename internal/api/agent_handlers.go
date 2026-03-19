@@ -92,6 +92,7 @@ func (h *AgentHandlers) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		Slug        string `json:"slug"`
 		Type        string `json:"type"`
+		TypeID      string `json:"type_id"`
 		Description string `json:"description"`
 		Platform    string `json:"platform"`
 		InstanceID  string `json:"instance_id"`
@@ -100,12 +101,29 @@ func (h *AgentHandlers) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "name and slug are required")
 		return
 	}
-	if body.Type == "" {
-		body.Type = "CUSTOM"
-	}
-	if !validAgentTypes[body.Type] {
-		writeError(w, http.StatusBadRequest, "INVALID_TYPE", "type must be ASSISTANT, CODER, QA, OPS, or CUSTOM")
-		return
+
+	var agentType, typeID *string
+
+	if body.TypeID != "" {
+		var slug string
+		err := h.pool.QueryRow(r.Context(), `
+			SELECT slug FROM agent_types WHERE id = $1 AND (org_id IS NULL OR org_id = $2)
+		`, body.TypeID, orgID).Scan(&slug)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_TYPE_ID", "type_id is not a valid agent type for this org")
+			return
+		}
+		typeID = &body.TypeID
+		agentType = &slug
+	} else if body.Type != "" {
+		if !validAgentTypes[body.Type] {
+			writeError(w, http.StatusBadRequest, "INVALID_TYPE", "type must be ASSISTANT, CODER, QA, OPS, or CUSTOM")
+			return
+		}
+		agentType = &body.Type
+	} else {
+		defaultType := "CUSTOM"
+		agentType = &defaultType
 	}
 
 	agent := models.Agent{
@@ -114,13 +132,14 @@ func (h *AgentHandlers) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		OwnerID: user.ID,
 		Name:    body.Name,
 		Slug:    body.Slug,
-		Type:    body.Type,
+		Type:    *agentType,
 		Status:  "ACTIVE",
+		TypeID:  typeID,
 	}
 	_, err := h.pool.Exec(r.Context(), `
-		INSERT INTO agents (id, org_id, owner_id, name, slug, type, description, platform, instance_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, agent.ID, agent.OrgID, agent.OwnerID, agent.Name, agent.Slug, agent.Type,
+		INSERT INTO agents (id, org_id, owner_id, name, slug, type, type_id, description, platform, instance_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, agent.ID, agent.OrgID, agent.OwnerID, agent.Name, agent.Slug, agent.Type, agent.TypeID,
 		nullableStr(body.Description), nullableStr(body.Platform), nullableStr(body.InstanceID))
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -138,6 +157,7 @@ func (h *AgentHandlers) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		"name":     agent.Name,
 		"slug":     agent.Slug,
 		"type":     agent.Type,
+		"type_id":  agent.TypeID,
 		"status":   agent.Status,
 	})
 }
@@ -151,7 +171,7 @@ func (h *AgentHandlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT id, owner_id, name, slug, type, description, status, platform,
+		SELECT id, owner_id, name, slug, type, type_id, description, status, platform,
 		       instance_id, ip_address, last_active_at, created_at
 		FROM agents WHERE org_id = $1 ORDER BY created_at
 	`, orgID)
@@ -167,6 +187,7 @@ func (h *AgentHandlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 		Name         string  `json:"name"`
 		Slug         string  `json:"slug"`
 		Type         string  `json:"type"`
+		TypeID       *string `json:"type_id"`
 		Description  *string `json:"description"`
 		Status       string  `json:"status"`
 		Platform     *string `json:"platform"`
@@ -179,7 +200,7 @@ func (h *AgentHandlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var agent models.Agent
 		if err := rows.Scan(
-			&agent.ID, &agent.OwnerID, &agent.Name, &agent.Slug, &agent.Type, &agent.Description,
+			&agent.ID, &agent.OwnerID, &agent.Name, &agent.Slug, &agent.Type, &agent.TypeID, &agent.Description,
 			&agent.Status, &agent.Platform, &agent.InstanceID, &agent.IPAddress, &agent.LastActiveAt, &agent.CreatedAt,
 		); err != nil {
 			continue
@@ -190,6 +211,7 @@ func (h *AgentHandlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 			Name:        agent.Name,
 			Slug:        agent.Slug,
 			Type:        agent.Type,
+			TypeID:      agent.TypeID,
 			Description: agent.Description,
 			Status:      agent.Status,
 			Platform:    agent.Platform,
@@ -220,11 +242,11 @@ func (h *AgentHandlers) GetAgent(w http.ResponseWriter, r *http.Request) {
 
 	var agent models.Agent
 	err = h.pool.QueryRow(r.Context(), `
-		SELECT id, org_id, owner_id, name, slug, type, description, status, platform,
+		SELECT id, org_id, owner_id, name, slug, type, type_id, description, status, platform,
 		       instance_id, ip_address, last_active_at, created_at, updated_at
 		FROM agents WHERE id = $1
 	`, agentID).Scan(
-		&agent.ID, &agent.OrgID, &agent.OwnerID, &agent.Name, &agent.Slug, &agent.Type, &agent.Description,
+		&agent.ID, &agent.OrgID, &agent.OwnerID, &agent.Name, &agent.Slug, &agent.Type, &agent.TypeID, &agent.Description,
 		&agent.Status, &agent.Platform, &agent.InstanceID, &agent.IPAddress, &agent.LastActiveAt, &agent.CreatedAt, &agent.UpdatedAt,
 	)
 	if err != nil {
@@ -269,6 +291,7 @@ func (h *AgentHandlers) GetAgent(w http.ResponseWriter, r *http.Request) {
 		"name":        agent.Name,
 		"slug":        agent.Slug,
 		"type":        agent.Type,
+		"type_id":     agent.TypeID,
 		"description": agent.Description,
 		"status":      agent.Status,
 		"platform":    agent.Platform,
