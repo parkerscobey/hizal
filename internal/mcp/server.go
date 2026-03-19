@@ -204,6 +204,53 @@ var toolList = []toolSchema{
 			"required": []string{"project_id", "id"},
 		},
 	},
+	{
+		Name:        "start_session",
+		Description: "Begin a new session for an agent. Returns the session ID and all always_inject chunks for the agent's context window. Fails if the agent already has an active session — use resume_session instead.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"agent_id":       map[string]interface{}{"type": "string", "description": "UUID of the agent starting the session"},
+				"project_id":     map[string]interface{}{"type": "string", "description": "Primary project UUID for this session (optional)"},
+				"lifecycle_slug": map[string]interface{}{"type": "string", "description": "Lifecycle preset: default, dev, admin, or org custom slug. Defaults to 'default'."},
+			},
+			"required": []string{"agent_id"},
+		},
+	},
+	{
+		Name:        "resume_session",
+		Description: "Extend an existing active session's TTL and re-inject always_inject chunks fresh. Use after a break or when resuming across tool calls.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"session_id": map[string]interface{}{"type": "string", "description": "UUID of the active session to resume"},
+			},
+			"required": []string{"session_id"},
+		},
+	},
+	{
+		Name:        "register_focus",
+		Description: "Record what task the agent is currently working on within a session. Required if the lifecycle config has 'register_focus' in required_steps.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"session_id": map[string]interface{}{"type": "string", "description": "UUID of the active session"},
+				"task":       map[string]interface{}{"type": "string", "description": "Description of the current task or goal"},
+			},
+			"required": []string{"session_id", "task"},
+		},
+	},
+	{
+		Name:        "end_session",
+		Description: "Close the session and return chunks written during it for KEEP / PROMOTE / DISCARD consolidation review.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"session_id": map[string]interface{}{"type": "string", "description": "UUID of the active session to end"},
+			},
+			"required": []string{"session_id"},
+		},
+	},
 }
 
 // ServeHTTP handles MCP JSON-RPC 2.0 requests.
@@ -454,6 +501,50 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 			return nil, err
 		}
 		return s.tools.DeleteContext(ctx, projectID, in.ID)
+
+	case "start_session":
+		var in StartSessionInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.StartSession(ctx, scope.OrgID, in)
+
+	case "resume_session":
+		var in ResumeSessionInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.ResumeSession(ctx, scope.OrgID, in)
+
+	case "register_focus":
+		var in RegisterFocusInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.RegisterFocus(ctx, scope.OrgID, in)
+
+	case "end_session":
+		var in EndSessionInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.EndSession(ctx, scope.OrgID, in)
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)

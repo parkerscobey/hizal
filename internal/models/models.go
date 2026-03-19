@@ -181,3 +181,45 @@ type UsageSnapshot struct {
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
+
+// SessionLifecycle represents a row in the session_lifecycles table.
+// org_id = NULL means a global built-in preset (default, dev, admin).
+type SessionLifecycle struct {
+	ID        string    `json:"id" db:"id"`
+	OrgID     *string   `json:"org_id,omitempty" db:"org_id"`
+	Name      string    `json:"name" db:"name"`
+	Slug      string    `json:"slug" db:"slug"`
+	IsDefault bool      `json:"is_default" db:"is_default"`
+	Config    []byte    `json:"config" db:"config"` // JSONB
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// SessionLifecycleConfig is the parsed form of SessionLifecycle.Config.
+type SessionLifecycleConfig struct {
+	TTLHours                int      `json:"ttl_hours"`
+	RequiredSteps           []string `json:"required_steps"`
+	ConsolidationThreshold  int      `json:"consolidation_threshold"`
+	InjectScopes            []string `json:"inject_scopes"`
+}
+
+// Session represents a row in the sessions table.
+// One active session per agent is enforced by a partial unique index.
+type Session struct {
+	ID                 string     `json:"id" db:"id"`
+	AgentID            string     `json:"agent_id" db:"agent_id"`
+	ProjectID          *string    `json:"project_id,omitempty" db:"project_id"`
+	OrgID              string     `json:"org_id" db:"org_id"`
+	LifecycleID        *string    `json:"lifecycle_id,omitempty" db:"lifecycle_id"`
+	Status             string     `json:"status" db:"status"` // active | ended | expired
+	FocusTask          *string    `json:"focus_task,omitempty" db:"focus_task"`
+	ChunksWritten      int        `json:"chunks_written" db:"chunks_written"`
+	ChunksRead         int        `json:"chunks_read" db:"chunks_read"`
+	ConsolidationDone  bool       `json:"consolidation_done" db:"consolidation_done"`
+	ResumeCount        int        `json:"resume_count" db:"resume_count"`
+	ExpiresAt          time.Time  `json:"expires_at" db:"expires_at"`
+	StartedAt          time.Time  `json:"started_at" db:"started_at"`
+	EndedAt            *time.Time `json:"ended_at,omitempty" db:"ended_at"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
+}
