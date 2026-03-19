@@ -116,10 +116,20 @@ type APIKey struct {
 //
 // ChunkType:
 //
-//	KNOWLEDGE: facts, architecture, conventions (default)
-//	RESEARCH:  investigation, findings (most disposable during consolidation)
-//	PLAN:      planned work, approaches
-//	DECISION:  made decisions, reasoning
+//	IDENTITY:    agent identity and core traits (AGENT scope, always_inject=true)
+//	MEMORY:      episodic context and task memory (AGENT scope, SURFACE)
+//	KNOWLEDGE:   facts and established patterns (PROJECT scope, KEEP)
+//	CONVENTION:  coding standards and patterns (PROJECT scope, always_inject=true, KEEP)
+//	PRINCIPLE:   org-level immutable truths (ORG scope, always_inject=true, KEEP)
+//	DECISION:    made decisions with reasoning (PROJECT scope, KEEP)
+//	RESEARCH:    investigation findings (PROJECT scope, SURFACE)
+//	PLAN:        planned work and approaches (PROJECT scope, SURFACE)
+//	SPEC:        specification documents (PROJECT scope, SURFACE)
+//	IMPLEMENTATION: code-level notes (PROJECT scope, SURFACE)
+//	CONSTRAINT:  hard limits and requirements (PROJECT scope, always_inject=true, KEEP)
+//	LESSON:      learned lessons (PROJECT scope, SURFACE)
+//	Org-specific types: fully CRUD-able
+//	Global types (org_id=NULL): immutable — PATCH/DELETE return 403
 type ContextChunk struct {
 	ID string `json:"id" db:"id"`
 	// ProjectID is nullable: NULL for ORG-scoped chunks and cross-project AGENT chunks.
@@ -207,6 +217,21 @@ type AgentType struct {
 	SearchFilters AgentTypeFilterConfig `json:"search_filters" db:"search_filters"`
 	CreatedAt     time.Time             `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time             `json:"updated_at" db:"updated_at"`
+}
+
+// ChunkType represents a row in the chunk_types table.
+// org_id = NULL means a global preset. Global presets are immutable.
+type ChunkType struct {
+	ID                     string    `json:"id" db:"id"`
+	OrgID                  *string   `json:"org_id,omitempty" db:"org_id"`
+	Name                   string    `json:"name" db:"name"`
+	Slug                   string    `json:"slug" db:"slug"`
+	Description            *string   `json:"description,omitempty" db:"description"`
+	DefaultScope           string    `json:"default_scope" db:"default_scope"`
+	DefaultAlwaysInject    bool      `json:"default_always_inject" db:"default_always_inject"`
+	ConsolidationBehavior  string    `json:"consolidation_behavior" db:"consolidation_behavior"`
+	CreatedAt              time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // SessionLifecycle represents a row in the session_lifecycles table.

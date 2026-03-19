@@ -54,6 +54,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		sessionH = NewSessionHandlers(mcpServer.Tools(), pool)
 	}
 	agentTypeH := NewAgentTypeHandlers(pool)
+	chunkTypeH := NewChunkTypeHandlers(pool)
 	// Stripe webhook — no JWT auth, verified by Stripe-Signature header
 	r.Post("/v1/webhooks/stripe", billingH.HandleWebhook)
 
@@ -150,6 +151,13 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		r.Get("/v1/agent-types/{id}", agentTypeH.GetAgentType)
 		r.Patch("/v1/agent-types/{id}", agentTypeH.UpdateAgentType)
 		r.Delete("/v1/agent-types/{id}", agentTypeH.DeleteAgentType)
+
+		// Chunk types
+		r.Post("/v1/orgs/{id}/chunk-types", chunkTypeH.CreateChunkType)
+		r.Get("/v1/orgs/{id}/chunk-types", chunkTypeH.ListChunkTypes)
+		r.Get("/v1/chunk-types/{id}", chunkTypeH.GetChunkType)
+		r.Patch("/v1/chunk-types/{id}", chunkTypeH.UpdateChunkType)
+		r.Delete("/v1/chunk-types/{id}", chunkTypeH.DeleteChunkType)
 
 		// Sessions
 		if sessionH != nil {
