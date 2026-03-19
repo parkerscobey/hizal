@@ -117,18 +117,18 @@ type APIKey struct {
 //
 // ChunkType:
 //
-//	IDENTITY:    agent identity and core traits (AGENT scope, always_inject=true)
-//	MEMORY:      episodic context and task memory (AGENT scope, SURFACE)
-//	KNOWLEDGE:   facts and established patterns (PROJECT scope, KEEP)
-//	CONVENTION:  coding standards and patterns (PROJECT scope, always_inject=true, KEEP)
-//	PRINCIPLE:   org-level immutable truths (ORG scope, always_inject=true, KEEP)
-//	DECISION:    made decisions with reasoning (PROJECT scope, KEEP)
-//	RESEARCH:    investigation findings (PROJECT scope, SURFACE)
-//	PLAN:        planned work and approaches (PROJECT scope, SURFACE)
-//	SPEC:        specification documents (PROJECT scope, SURFACE)
+//	IDENTITY:      agent identity and core traits (AGENT scope, always_inject=true)
+//	MEMORY:        episodic context and task memory (AGENT scope, SURFACE)
+//	KNOWLEDGE:     facts and established patterns (PROJECT scope, KEEP)
+//	CONVENTION:    coding standards and patterns (PROJECT scope, always_inject=true, KEEP)
+//	PRINCIPLE:     org-level immutable truths (ORG scope, always_inject=true, KEEP)
+//	DECISION:      made decisions with reasoning (PROJECT scope, KEEP)
+//	RESEARCH:      investigation findings (PROJECT scope, SURFACE)
+//	PLAN:          planned work and approaches (PROJECT scope, SURFACE)
+//	SPEC:          specification documents (PROJECT scope, SURFACE)
 //	IMPLEMENTATION: code-level notes (PROJECT scope, SURFACE)
-//	CONSTRAINT:  hard limits and requirements (PROJECT scope, always_inject=true, KEEP)
-//	LESSON:      learned lessons (PROJECT scope, SURFACE)
+//	CONSTRAINT:    hard limits and requirements (PROJECT scope, always_inject=true, KEEP)
+//	LESSON:        learned lessons (PROJECT scope, SURFACE)
 //	Org-specific types: fully CRUD-able
 //	Global types (org_id=NULL): immutable — PATCH/DELETE return 403
 type ContextChunk struct {
@@ -143,7 +143,7 @@ type ContextChunk struct {
 	OrgID *string `json:"org_id,omitempty" db:"org_id"`
 	// AlwaysInject: true = ambient baseline, false = on-demand search.
 	AlwaysInject bool `json:"always_inject" db:"always_inject"`
-	// ChunkType: KNOWLEDGE | RESEARCH | PLAN | DECISION. Defaults to KNOWLEDGE.
+	// ChunkType: IDENTITY | MEMORY | KNOWLEDGE | CONVENTION | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON. Defaults to KNOWLEDGE.
 	ChunkType      string          `json:"chunk_type" db:"chunk_type"`
 	QueryKey       string          `json:"query_key" db:"query_key"`
 	Title          string          `json:"title" db:"title"`
@@ -226,6 +226,22 @@ type AgentType struct {
 
 // ChunkType represents a row in the chunk_types table.
 // org_id = NULL means a global preset. Global presets are immutable.
+//
+// The 12 canonical global types are:
+//   - IDENTITY:    AGENT scope, always_inject=true, consolidation=KEEP
+//   - MEMORY:      AGENT scope, always_inject=false, consolidation=SURFACE
+//   - KNOWLEDGE:   PROJECT scope, always_inject=false, consolidation=KEEP
+//   - CONVENTION:  PROJECT scope, always_inject=true, consolidation=KEEP
+//   - PRINCIPLE:   ORG scope, always_inject=true, consolidation=KEEP
+//   - DECISION:   PROJECT scope, always_inject=false, consolidation=KEEP
+//   - RESEARCH:    PROJECT scope, always_inject=false, consolidation=SURFACE
+//   - PLAN:        PROJECT scope, always_inject=false, consolidation=SURFACE
+//   - SPEC:        PROJECT scope, always_inject=false, consolidation=SURFACE
+//   - IMPLEMENTATION: PROJECT scope, always_inject=false, consolidation=SURFACE
+//   - CONSTRAINT:  PROJECT scope, always_inject=true, consolidation=KEEP
+//   - LESSON:      PROJECT scope, always_inject=false, consolidation=SURFACE
+//
+// Org-specific types (org_id != NULL) are fully CRUD-able.
 type ChunkType struct {
 	ID                    string    `json:"id" db:"id"`
 	OrgID                 *string   `json:"org_id,omitempty" db:"org_id"`

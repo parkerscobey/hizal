@@ -97,6 +97,22 @@ type StorePrincipleInput struct {
 	Related            []string `json:"related,omitempty"`
 }
 
+type WriteChunkInput struct {
+	Type         string   `json:"type"`
+	QueryKey     string   `json:"query_key"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	ProjectID    string   `json:"project_id,omitempty"`
+	AgentID      string   `json:"agent_id,omitempty"`
+	OrgID        string   `json:"org_id,omitempty"`
+	AlwaysInject *bool    `json:"always_inject,omitempty"`
+	Scope        string   `json:"scope,omitempty"`
+	SourceFile   string   `json:"source_file,omitempty"`
+	SourceLines  [2]int   `json:"source_lines,omitempty"`
+	Gotchas      []string `json:"gotchas,omitempty"`
+	Related      []string `json:"related,omitempty"`
+}
+
 // computeFreshness returns a score multiplier in [FreshnessMin, 1.0] based on
 // how recently the chunk was active. lastActivity should be the most recent of
 // updated_at and the latest review created_at for the chunk.
@@ -365,6 +381,33 @@ func isValidChunkType(ctx context.Context, pool *pgxpool.Pool, orgID string, chu
 		return false, err
 	}
 	return count > 0, nil
+}
+
+type ChunkTypeDefaults struct {
+	DefaultScope        string
+	DefaultAlwaysInject bool
+}
+
+func resolveChunkTypeDefaults(ctx context.Context, pool *pgxpool.Pool, orgID *string, slug string) (ChunkTypeDefaults, error) {
+	var defaults ChunkTypeDefaults
+	err := pool.QueryRow(ctx, `
+		SELECT default_scope, default_always_inject
+		FROM chunk_types
+		WHERE slug = $1 AND (org_id IS NULL OR org_id = $2)
+		ORDER BY org_id NULLS LAST
+		LIMIT 1
+	`, slug, nullStrPtr(orgID)).Scan(&defaults.DefaultScope, &defaults.DefaultAlwaysInject)
+	if err != nil {
+		return defaults, fmt.Errorf("chunk type %q not found: %w", slug, err)
+	}
+	return defaults, nil
+}
+
+func nullStrPtr(s *string) interface{} {
+	if s == nil {
+		return nil
+	}
+	return *s
 }
 
 // ---- Tool Implementations ----
@@ -940,7 +983,9 @@ func (t *Tools) fetchStaleSignals(ctx context.Context, chunkIDs []string) (map[s
 
 // ---- Purpose-Built Write Tools ----
 
-// WriteIdentity stores an IDENTITY chunk scoped to an agent (always_inject=true).
+// WriteIdentity stores an IDENTITY chunk scoped to an agent.
+// scope and always_inject are derived from the chunk_types table.
+// The type slug (IDENTITY) is always enforced regardless of table defaults.
 func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*WriteContextResult, error) {
 	if in.AgentID == "" {
 		return nil, fmt.Errorf("agent_id is required")
@@ -949,6 +994,11 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 		return nil, fmt.Errorf("query_key, title, and content are required")
 	}
 
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), nil, "IDENTITY")
+	if err != nil {
+		return nil, fmt.Errorf("resolve chunk type defaults: %w", err)
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
 		log.Printf("embedding failed: %v", err)
@@ -965,9 +1015,9 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, 'AGENT', $1, NULL, true, 'IDENTITY', $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES (NULL, $1, $2, NULL, $3, 'IDENTITY', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, in.AgentID, in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, in.AgentID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -985,8 +1035,8 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        "AGENT",
-		AlwaysInject: true,
+		Scope:        defaults.DefaultScope,
+		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "IDENTITY",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -994,7 +1044,9 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	}, nil
 }
 
-// WriteMemory stores a MEMORY chunk scoped to an agent (always_inject=false).
+// WriteMemory stores a MEMORY chunk scoped to an agent.
+// scope and always_inject are derived from the chunk_types table.
+// The type slug (MEMORY) is always enforced regardless of table defaults.
 func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteContextResult, error) {
 	if in.AgentID == "" {
 		return nil, fmt.Errorf("agent_id is required")
@@ -1003,6 +1055,11 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 		return nil, fmt.Errorf("query_key, title, and content are required")
 	}
 
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), nil, "MEMORY")
+	if err != nil {
+		return nil, fmt.Errorf("resolve chunk type defaults: %w", err)
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
 		log.Printf("embedding failed: %v", err)
@@ -1019,9 +1076,9 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, 'AGENT', $1, NULL, false, 'MEMORY', $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES (NULL, $1, $2, NULL, $3, 'MEMORY', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, in.AgentID, in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, in.AgentID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1039,8 +1096,8 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        "AGENT",
-		AlwaysInject: false,
+		Scope:        defaults.DefaultScope,
+		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "MEMORY",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1048,7 +1105,9 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	}, nil
 }
 
-// WriteKnowledge stores a KNOWLEDGE chunk scoped to a project (always_inject=false).
+// WriteKnowledge stores a KNOWLEDGE chunk scoped to a project.
+// scope and always_inject are derived from the chunk_types table.
+// The type slug (KNOWLEDGE) is always enforced regardless of table defaults.
 func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKnowledgeInput) (*WriteContextResult, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project_id is required")
@@ -1063,6 +1122,14 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 		return nil, fmt.Errorf("PROJECT_LOCKED: this project is read-only — upgrade to Pro to unlock it")
 	}
 
+	var orgID *string
+	pool(t).QueryRow(ctx, `SELECT org_id FROM projects WHERE id = $1`, projectID).Scan(&orgID)
+
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), orgID, "KNOWLEDGE")
+	if err != nil {
+		return nil, fmt.Errorf("resolve chunk type defaults: %w", err)
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
 		log.Printf("embedding failed: %v", err)
@@ -1079,9 +1146,9 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES ($1, 'PROJECT', NULL, NULL, false, 'KNOWLEDGE', $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, NULL, NULL, $3, 'KNOWLEDGE', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, projectID, in.QueryKey, in.Title, contentJSON, vec,
+	`, projectID, defaults.DefaultScope, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1099,8 +1166,8 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        "PROJECT",
-		AlwaysInject: false,
+		Scope:        defaults.DefaultScope,
+		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1108,7 +1175,9 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	}, nil
 }
 
-// WriteConvention stores a CONVENTION chunk scoped to a project (always_inject=true).
+// WriteConvention stores a CONVENTION chunk scoped to a project.
+// scope and always_inject are derived from the chunk_types table.
+// The type slug (CONVENTION) is always enforced regardless of table defaults.
 func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteConventionInput) (*WriteContextResult, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project_id is required")
@@ -1123,6 +1192,14 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 		return nil, fmt.Errorf("PROJECT_LOCKED: this project is read-only — upgrade to Pro to unlock it")
 	}
 
+	var orgID *string
+	pool(t).QueryRow(ctx, `SELECT org_id FROM projects WHERE id = $1`, projectID).Scan(&orgID)
+
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), orgID, "CONVENTION")
+	if err != nil {
+		return nil, fmt.Errorf("resolve chunk type defaults: %w", err)
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
 		log.Printf("embedding failed: %v", err)
@@ -1139,9 +1216,9 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES ($1, 'PROJECT', NULL, NULL, true, 'CONVENTION', $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, NULL, NULL, $3, 'CONVENTION', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, projectID, in.QueryKey, in.Title, contentJSON, vec,
+	`, projectID, defaults.DefaultScope, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1159,8 +1236,8 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        "PROJECT",
-		AlwaysInject: true,
+		Scope:        defaults.DefaultScope,
+		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "CONVENTION",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1168,7 +1245,9 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	}, nil
 }
 
-// WriteOrgKnowledge stores a KNOWLEDGE chunk scoped to an org (always_inject=false).
+// WriteOrgKnowledge stores a KNOWLEDGE chunk scoped to an org.
+// scope and always_inject are derived from the chunk_types table.
+// The type slug (KNOWLEDGE) is always enforced regardless of table defaults.
 func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrgKnowledgeInput) (*WriteContextResult, error) {
 	if orgID == "" {
 		return nil, fmt.Errorf("org_id is required")
@@ -1177,6 +1256,11 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 		return nil, fmt.Errorf("query_key, title, and content are required")
 	}
 
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), &orgID, "KNOWLEDGE")
+	if err != nil {
+		return nil, fmt.Errorf("resolve chunk type defaults: %w", err)
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
 		log.Printf("embedding failed: %v", err)
@@ -1193,9 +1277,9 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, 'ORG', NULL, $1, false, 'KNOWLEDGE', $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES (NULL, $1, NULL, $2, $3, 'KNOWLEDGE', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, orgID, in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1213,8 +1297,8 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        "ORG",
-		AlwaysInject: false,
+		Scope:        defaults.DefaultScope,
+		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1222,7 +1306,9 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	}, nil
 }
 
-// StorePrinciple stores a PRINCIPLE chunk scoped to an org (always_inject=true).
+// StorePrinciple stores a PRINCIPLE chunk scoped to an org.
+// scope and always_inject are derived from the chunk_types table.
+// The type slug (PRINCIPLE) is always enforced regardless of table defaults.
 // Requires promoted_by_user_id to enforce human promotion.
 func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrincipleInput) (*WriteContextResult, error) {
 	if orgID == "" {
@@ -1235,6 +1321,11 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 		return nil, fmt.Errorf("store_principle requires human promotion — use write_org_knowledge to propose, then a human promotes via the API.")
 	}
 
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), &orgID, "PRINCIPLE")
+	if err != nil {
+		return nil, fmt.Errorf("resolve chunk type defaults: %w", err)
+	}
+
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
 		log.Printf("embedding failed: %v", err)
@@ -1251,9 +1342,9 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, 'ORG', NULL, $1, true, 'PRINCIPLE', $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES (NULL, $1, NULL, $2, $3, 'PRINCIPLE', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, orgID, in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1271,9 +1362,128 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        "ORG",
-		AlwaysInject: true,
+		Scope:        defaults.DefaultScope,
+		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "PRINCIPLE",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
+}
+
+// WriteChunk is the generic chunk writing tool. It looks up the type's scope
+// and always_inject defaults from the chunk_types table, then applies any
+// overrides provided by the caller. This is the path for custom org chunk types.
+// The six named tools (write_identity, write_memory, etc.) remain for the 12
+// global defaults — they're opinionated shortcuts that guarantee correct semantics.
+func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkInput) (*WriteContextResult, error) {
+	if in.Type == "" {
+		return nil, fmt.Errorf("type is required (e.g. KNOWLEDGE, MEMORY, SPEC)")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	// Determine orgID for chunk_types lookup
+	var orgID *string
+	if projectID != "" {
+		pool(t).QueryRow(ctx, `SELECT org_id FROM projects WHERE id = $1`, projectID).Scan(&orgID)
+	} else if in.OrgID != "" {
+		orgID = &in.OrgID
+	}
+
+	defaults, err := resolveChunkTypeDefaults(ctx, pool(t), orgID, in.Type)
+	if err != nil {
+		return nil, fmt.Errorf("INVALID_CHUNK_TYPE: %q is not a valid chunk type for this org", in.Type)
+	}
+
+	// Resolve scope — override wins, else table default
+	effectiveScope := in.Scope
+	if effectiveScope == "" {
+		effectiveScope = defaults.DefaultScope
+	}
+
+	// Resolve always_inject — override wins, else table default
+	effectiveAlwaysInject := defaults.DefaultAlwaysInject
+	if in.AlwaysInject != nil {
+		effectiveAlwaysInject = *in.AlwaysInject
+	}
+
+	// Validate required IDs based on effective scope
+	var effectiveProjectID *string
+	var effectiveAgentID *string
+	var effectiveOrgID *string
+
+	switch effectiveScope {
+	case "PROJECT":
+		if projectID == "" && in.ProjectID == "" {
+			return nil, fmt.Errorf("project_id is required for PROJECT-scoped chunks")
+		}
+		effectiveProjectID = &projectID
+		if in.ProjectID != "" {
+			effectiveProjectID = &in.ProjectID
+		}
+	case "AGENT":
+		if in.AgentID == "" {
+			return nil, fmt.Errorf("agent_id is required for AGENT-scoped chunks")
+		}
+		effectiveAgentID = &in.AgentID
+	case "ORG":
+		if in.OrgID == "" {
+			return nil, fmt.Errorf("org_id is required for ORG-scoped chunks")
+		}
+		effectiveOrgID = &in.OrgID
+	}
+
+	// Check project is not locked (downgraded)
+	if effectiveProjectID != nil && *effectiveProjectID != "" {
+		var lockedAt *time.Time
+		if err := pool(t).QueryRow(ctx, `SELECT locked_at FROM projects WHERE id = $1`, *effectiveProjectID).Scan(&lockedAt); err == nil && lockedAt != nil {
+			return nil, fmt.Errorf("PROJECT_LOCKED: this project is read-only — upgrade to Pro to unlock it")
+		}
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		RETURNING id, created_at
+	`, effectiveProjectID, effectiveScope, effectiveAgentID, effectiveOrgID,
+		effectiveAlwaysInject, in.Type,
+		in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        effectiveScope,
+		AlwaysInject: effectiveAlwaysInject,
+		ChunkType:    in.Type,
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
 		CreatedAt:    createdAt,
