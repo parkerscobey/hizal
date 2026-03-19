@@ -2,448 +2,170 @@
 
 ## Overview
 
-Skills guide agents through structured workflows, preventing the "dumb zone" and ensuring context compounds between runs.
+Skills guide agents through structured workflows. Each skill maps to a phase of the agent work lifecycle and uses the appropriate purpose-built write tools.
+
+The local `skills/` directory contains the canonical SKILL.md files that MCP clients read. This document provides the design intent and coordination notes.
 
 ---
 
 ## Skill: winnow-seed
 
-**Purpose:** Populate a new Winnow project with foundational context from a codebase
+**Purpose:** Populate a new Winnow project with foundational context from a codebase.
+
+**Tools used:** `write_knowledge`, `write_convention`
 
 **When to use:**
 - A new project has been created but has no chunks
 - A codebase is being onboarded to Winnow for the first time
 - `search_context(query="*")` returns empty or near-empty results
 
-**Philosophy:**
-Seeding is the most important step in Winnow's lifecycle. Without foundational context, all other workflows (research, plan, compact, review) have nothing to build on. An empty project is a cold start for every agent, every session. A well-seeded project lets agents onboard in seconds instead of hours.
+**Workflow:**
+1. **Assess** — `search_context(query="*")` to confirm the project is empty
+2. **Gather** — Scan deeply: docs, configs, source code, CI/CD, infra, tests
+3. **Plan taxonomy** — Draft query_key categories before writing
+4. **Write chunks** — One category at a time via `write_knowledge`
+5. **Write conventions** — Identify foundational rules and use `write_convention` (sparingly)
+6. **Verify** — Confirm every category has ≥1 chunk
+7. **Report** — Summarize total chunks, categories, gaps
 
-### Workflow
-
-```
-1. ASSESS current state
-   └─> search_context(query="*") — empty? Proceed.
-   └─> Already has chunks? Use winnow-research instead.
-
-2. GATHER source material
-   └─> Scan deeply: docs, configs, source code, CI/CD, infra, tests
-   └─> Do NOT skim — read entry points, routers, models, migrations
-
-3. PLAN taxonomy
-   └─> Draft query_key categories before writing anything
-   └─> Recommended: architecture, domain-model, api-routes, auth,
-       database-schema, code-patterns, frontend-patterns, deployment
-   └─> Drop irrelevant categories, add domain-specific ones
-
-4. WRITE chunks systematically
-   └─> One category at a time
-   └─> 500-1500 words per chunk, one concept per chunk
-   └─> Include source_file, gotchas, and related cross-references
-   └─> Multiple chunks per category is fine
-
-5. VERIFY coverage
-   └─> search_context(query="*") — every category has ≥1 chunk
-   └─> No major area is unrepresented
-   └─> related fields form a connected graph
-
-6. REPORT
-   └─> Summarize: total chunks, categories, gaps for future research
-```
-
-### Quality Checklist
-
-Before writing each chunk:
-- [ ] An agent reading only this chunk could start working in this area
-- [ ] Concrete file paths and references are included
-- [ ] At least one gotcha is documented (if any exist)
-- [ ] Related query_keys point to connected topics
-- [ ] No significant overlap with another planned chunk
-
-### Example
-
-```
-New project created for a Go API + React SPA.
-
-1. search_context(query="*")
-   └─> No results — empty project
-
-2. Scan repos:
-   └─> Read go.mod, main.go, router.go, all handlers
-   └─> Read package.json, App.tsx, all pages
-   └─> Read Dockerfile, CI/CD workflows, migrations
-
-3. Plan taxonomy:
-   └─> architecture, domain-model, api-routes, auth,
-       database-schema, code-patterns, frontend-patterns, deployment
-
-4. Write 15 chunks across 8 categories:
-   └─> write_context(query_key="architecture", title="System Architecture Overview", ...)
-   └─> write_context(query_key="domain-model", title="Domain Model and Glossary", ...)
-   └─> ... (one category at a time, methodically)
-
-5. Verify: search_context(query="*") → 15 chunks across all 8 categories ✓
-
-6. Report: "Seeded 15 chunks across 8 categories. Gaps: no test patterns documented yet."
-```
+**Key guidance:**
+- `write_knowledge` for facts (architecture, patterns, decisions)
+- `write_convention` only for durable rules that every agent must always know
+- Never use `write_convention` for things that change — use `write_knowledge` instead
 
 ---
 
 ## Skill: winnow-research
 
-**Purpose:** Guide agents to efficiently gather and create context before planning
+**Purpose:** Investigate a topic, filling gaps in existing context.
+
+**Tools used:** `write_knowledge` (for project findings), `write_memory` (for personal observations)
 
 **When to use:**
 - Starting any non-trivial task in a brownfield codebase
 - Onboarding to a new codebase area
 - Before writing code that interacts with unfamiliar systems
 
-**Philosophy:**
-Research is compression of truth. The goal is to understand the system well enough to write a clear implementation plan.
+**Workflow:**
+1. **Search** — Check what already exists: `search_context(query="[topic]", project_id="...")`
+2. **Read** — Read the most relevant chunks; check `updated_at` for staleness
+3. **Fill gaps** — If context is missing or stale, explore the codebase
+4. **Write findings** — `write_knowledge` for facts worth sharing with the team
+5. **Write observations** — `write_memory` for personal discoveries and interpretive notes
+6. **Link** — Update `related` fields to connect knowledge graph
 
-### Workflow
-
-```
-1. SEARCH existing context
-   └─> "What do we already know about [topic]?"
-   
-2. IF found
-   └─> Read and summarize existing context
-   └─> CHECK metadata: version, updated_at
-   └─> IF updated_at is old (>7 days), consider updating
-   └─> IF content has gaps, consider updating
-   └─> IF outdated info found, use get_context_versions to see history
-   
-3. IF not found OR gaps exist
-   └─> Explore codebase (read files, find patterns)
-   └─> Write new context chunk capturing findings
-   
-4. STRUCTURE context
-   └─> What: one-liner description
-   └─> Files: key file paths + line numbers
-   └─> Gotchas: warnings for future agents
-   └─> Related: connected context areas
-   
-5. COMPOUND
-   └─> Link to related contexts (update related field)
-   └─> IF updating existing chunk, use update_context with change_note
-```
-
-### Context Quality Checklist
-
-Before finishing research, confirm:
-- [ ] Can explain what this system/feature does in one sentence
-- [ ] Know which files are involved (paths + lines)
-- [ ] Understand dependencies and relationships
-- [ ] Identified at least one "gotcha" or warning
-- [ ] Know what other areas relate to this
-- [ ] Checked updated_at — content is recent
-- [ ] If content is stale (>7 days old), plan to update it
-
-### Example
-
-**Case A: No existing context**
-```
-Task: "Add password reset functionality"
-
-1. search_context(query: "password reset")
-   └─> No results found
-
-2. Explore codebase:
-   └─> Find: app/models/user.rb (lines 200-250)
-   └─> Find: app/mailers/password_mailer.rb
-   └─> Find: config/initializers/devise.rb
-
-3. write_context(
-     query_key: "password-reset",
-     title: "Password reset flow using Devise",
-     content: "Uses Devise's recoverable module...",
-     gotchas: [...],
-     related: ["email-delivery", "devise-auth"]
-   )
-```
-
-**Case B: Existing context found (check freshness!)**
-```
-Task: "Add password reset functionality"
-
-1. search_context(query: "password reset")
-   └─> Found: ctx_abc123 "Devise auth" (updated 2 weeks ago)
-
-2. read_context(id: "ctx_abc123")
-   └─> Content is old - doesn't mention password reset
-   └─> version: 1, updated_at: 2026-02-15
-
-3. get_context_versions(id: "ctx_abc123")
-   └─> No other versions - this is the original
-
-4. update_context(
-     id: "ctx_abc123",
-     content: "Devise auth (UPDATED with password reset):
-       - Uses recoverable module for password resets
-       - Token: reset_password_token (unique string)
-       - Timestamp: reset_password_sent_at
-       - PasswordMailer sends reset emails
-       - Token valid for 6 hours",
-     gotchas: [
-       "Token expires after 6 hours - no way to extend",
-       "No rate limiting on reset requests (NEW)"
-     ],
-     change_note: "Added password reset info from feature work"
-   )
-```
-
----
-
-## Skill: winnow-compact
-
-**Purpose:** Compress context before continuing work or ending a session
-
-**When to use:**
-- After 15-20 minutes of continuous work
-- Before starting a new phase of work
-- Before ending a session (save for future agents)
-- When entering the "dumb zone" (context >40%)
-
-**Philosophy:**
-Context compaction resets the agent's state while preserving learning. It's the antidote to the dumb zone.
-
-### Workflow
-
-```
-1. IDENTIFY what you've learned
-   └─> Query the topic(s) you've been working on
-   
-2. FETCH all related chunks
-   └─> Call compact_context with query to get all matching chunks in one call
-   
-3. SUMMARIZE (agent-side — you do this, not the server)
-   └─> Produce a structured summary:
-       - What: one-liner description
-       - Files: key file paths + line numbers
-       - Gotchas: warnings from all chunks
-       - Related: connected context areas
-       - Gaps: what's still unknown
-   
-4. WRITE compacted summary back
-   └─> Call write_context with the summary as a new chunk
-   └─> Use a descriptive query_key (e.g., "auth-compacted-2026-03")
-   
-5. DECIDE next step:
-   a) Start fresh session with summary as seed
-   b) Continue working with compressed context
-```
-
-### Context Compaction Checklist
-
-Before compacting, confirm:
-- [ ] Can describe what you've learned in 2-3 sentences
-- [ ] Listed key files with line numbers
-- [ ] Identified gotchas for future agents
-- [ ] Noted related areas that weren't explored
-
-### Example
-
-```
-Agent has been working for 20 minutes on auth refactoring.
-
-1. compact_context(query: "auth session")
-   └─> Returns 8 raw chunks about auth
-
-2. Agent summarizes (in its own context):
-   "Session handling via Warden with database strategy.
-    Keys: session_key, user_id. Expires 30d.
-    Files: app/models/user.rb (120-180), app/warden/strategies/db.rb (1-50)
-    Gotchas: No remember_token, Cleanup daily 3am UTC
-    Related: api-auth
-    Gaps: OAuth2 support undocumented"
-
-3. Write compacted summary back:
-   write_context(
-     query_key: "auth-session-compacted-2026-03",
-     title: "Auth session — compacted summary (Mar 2026)",
-     content: "Session handling via Warden with database strategy...",
-     gotchas: ["No remember_token", "Cleanup daily 3am UTC"],
-     related: ["api-auth"]
-   )
-```
-
----
-
-## Skill: winnow-onboard
-
-**Purpose:** Quickly get a new agent up to speed on a codebase area
-
-**When to use:**
-- Agent starts fresh and needs to understand context
-- Hand-off between agents
-- Returning to a codebase after time away
-
-**Philosophy:**
-Onboarding should be fast, focused, and compressed. Start with the highest-level context, then drill down as needed.
-
-### Workflow
-
-```
-1. QUERY major subsystems
-   └─> "What are the major areas of this codebase?"
-
-2. READ top context for each subsystem
-   └─> Prioritize most relevant to current task
-   
-3. BUILD mental model
-   └─> Map relationships between areas
-   └─> Identify where current task fits
-   
-4. IDENTIFY gaps
-   └─> What don't we know yet?
-   └─> Write context if needed (future agents thank you)
-```
-
-### Example
-
-```
-New agent starting work on payments.
-
-1. search_context(query: "payment", limit: 20)
-   └─> Returns: payment-tokens, stripe-integration, refund-flow
-
-2. Read top 2 results:
-   └─> read_context(id: "ctx_payment_tokens")
-   └─> read_context(id: "ctx_stripe_integration")
-
-3. Mental model:
-   └─> Payments use Stripe
-   └─> Tokens stored in FormOfPayment
-   └─> Refunds go through different flow
-   
-4. Gap: "What's the retry logic for failed payments?"
-   └─> write_context(query: "payment-retry", ...)
-```
+**Decision guidance:**
+- Is this fact about the project that any agent should know? → `write_knowledge`
+- Is this a personal observation or working pattern? → `write_memory`
+- Is this a durable rule that should always be in context? → Propose via `write_knowledge` with a note; let a human promote to `write_convention`
 
 ---
 
 ## Skill: winnow-plan
 
-**Purpose:** Create implementation plans that can be reviewed and executed reliably
+**Purpose:** Create an implementation plan validated against existing context.
+
+**Tools used:** `write_knowledge` (plans are shared)
 
 **When to use:**
-- After research is complete
-- Before writing any code
-- When handoff to another agent
+- After research is complete, before writing code
+- When handing off to another agent
+- For any non-trivial feature or change
 
-**Philosophy:**
-A good plan is compression of intent. Even weaker models can execute good plans reliably.
+**Workflow:**
+1. **Review** — Read all relevant context chunks for the task
+2. **Search decisions** — `search_context(query="[topic]", chunk_type="DECISION")` for key architectural decisions
+3. **Draft plan** — Structure with file paths, line numbers, patterns to follow
+4. **Validate** — Check plan against stored conventions and constraints
+5. **Write** — `write_knowledge(chunk_type="PLAN", ...)` to store the plan
 
-### Workflow
+---
 
-```
-1. REVIEW research
-   └─> Read all relevant context chunks
-   
-2. STRUCTURE plan
-   └─> File names with paths
-   └─> Line numbers for key changes
-   └─> Code snippets for patterns to follow
-   └─> Test approach
-   
-3. VALIDATE
-   └─> Can you explain this plan in 3 sentences?
-   └─> Does it reference specific code locations?
-   └─> Are there clear success criteria?
-   
-4. WRITE plan as context
-   └─> Store for review and execution
-```
+## Skill: winnow-compact
 
-### Plan Template
+**Purpose:** Compress overlapping or noisy context into higher-signal chunks.
 
-```markdown
-## Plan: [Feature Name]
+**Tools used:** `compact_context`, `write_knowledge`, `delete_context`
 
-### What
-[One sentence description]
+**When to use:**
+- After 15-20 minutes of continuous work (approaching dumb zone)
+- Before ending a session
+- When retrieval feels noisy or redundant
 
-### Files to modify
-- `app/models/user.rb` (lines 100-150): Add method
-- `app/controllers/api/v1/users_controller.rb` (lines 50-75): Add endpoint
+**Workflow:**
+1. **Fetch** — `compact_context(query="[topic]")` to get all matching chunks
+2. **Summarize** — Agent synthesizes client-side into a structured summary
+3. **Write back** — `write_knowledge` with the compacted summary
+4. **Clean up** — Delete or supersede the original chunks
 
-### Code patterns to follow
-- See `app/models/session.rb` lines 30-40 for similar pattern
+**Key guidance:**
+- Compact within the same chunk_type — don't merge DECISION chunks into KNOWLEDGE summaries
+- RESEARCH chunks are more disposable — can discard without promoting
+- DECISION chunks should be preserved or promoted, never silently discarded
+- Compact one scope at a time (PROJECT, AGENT, or ORG — don't mix)
 
-###}
+---
+
+## Skill: winnow-onboard
+
+**Purpose:** Quickly get an agent up to speed on a project.
+
+**Tools used:** `list_projects`, `search_context`, `read_context`
+
+**When to use:**
+- Agent starts fresh and needs project context
+- Hand-off between agents
+- Returning to a project after time away
+
+**Workflow:**
+1. **Discover** — `list_projects` to find the target project
+2. **Search high-level** — Architecture, conventions, current status
+3. **Search decisions** — `search_context(chunk_type="DECISION")` for key architectural choices
+4. **Search plans** — `search_context(chunk_type="PLAN")` for in-flight work
+5. **Read** — Full read of the most relevant chunks
+6. **Build mental model** — Map relationships, identify where the current task fits
+7. **Identify gaps** — If foundational context is missing, create it
+
 ---
 
 ## Skill: winnow-review
 
-**Purpose:** Validate and improve context quality through structured reviews
+**Purpose:** Validate and improve context quality through structured reviews.
+
+**Tools used:** `review_context`, `update_context`, `delete_context`
 
 **When to use:**
-- After completing a task that used context
+- After completing a task that relied on context
 - When user provides feedback on agent generation
 - During periodic quality audits
-- When context seems outdated or incorrect
 
-**Philosophy:**
-Context quality improves through feedback loops. Following the original development MCP's `add_doc_review` pattern, agents should review context after use.
-
-### Workflow
-
-```
-1. IDENTIFY context used
-   └─> What context chunks helped (or hurt) the task?
-   
-2. ASSESS quality
-   └─> Usefulness: Did this help complete the task?
-   └─> Correctness: Is the information accurate?
-   
-3. DETERMINE action
-   └─> useful: Keep as-is
-   └─> needs_update: Review and update
-   └─> outdated: Mark for refresh
-   └─> incorrect: Flag for correction
-   
-4. WRITE review
-   └─> Call review_context with ratings and notes
-   
-5. IF action != useful
-   └─> Update or rewrite context chunk
-```
-
-### Review Quality Checklist
-
-Before submitting a review, confirm:
-- [ ] Used this context to complete a task
-- [ ] Rated usefulness (1-5) with note explaining why
-- [ ] Rated correctness (1-5) with note if issues found
-- [ ] Selected appropriate action based on quality
-
-### Example
-
-```
-Agent just completed adding password reset functionality using context about auth.
-
-1. Which context helped?
-   └─> ctx_abc123: "Session-based auth with Warden"
-
-2. Assess quality:
-   └─> Usefulness: 4 - Gotchas about token expiry were helpful
-   └─> Correctness: 5 - All info was accurate
-
-3. Action: useful
-
-4. review_context(
-     chunk_id: "ctx_abc123",
-     task: "Added password reset functionality",
-     usefulness: 4,
-     usefulness_note: "Gotchas about token expiry were very helpful",
-     correctness: 5,
-     action: "useful"
-   )
-
-5. No update needed - context is good.
-```
+**Workflow:**
+1. **Identify** — Which chunks helped (or hurt) the task?
+2. **Assess** — Rate usefulness (1-5) and correctness (1-5)
+3. **Determine action** — `useful`, `needs_update`, `outdated`, `incorrect`
+4. **Submit review** — `review_context` with ratings and notes
+5. **Fix if needed** — `update_context` for stale content, `delete_context` for incorrect
 
 ---
 
-*Last updated: 2026-03-08*
-*Status: Draft / Iterating*
+## Skill Coordination Notes
+
+### Write tool routing
+
+| Skill | Primary write tool | Chunk type |
+|-------|-------------------|------------|
+| winnow-seed | `write_knowledge`, `write_convention` | KNOWLEDGE, CONVENTION |
+| winnow-research | `write_knowledge`, `write_memory` | KNOWLEDGE, MEMORY, RESEARCH |
+| winnow-plan | `write_knowledge` | PLAN |
+| winnow-compact | `write_knowledge` | KNOWLEDGE (compacted) |
+| winnow-review | `update_context` (fixes) | (preserves original type) |
+
+### Session integration
+
+- **winnow-onboard** should be the first skill used in any session after `start_session`
+- **winnow-compact** should be called before `end_session` if chunks were written
+- **winnow-review** should be called after relying on context to complete work
+
+---
+
+*Last updated: 2026-03-19*

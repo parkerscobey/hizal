@@ -1,97 +1,238 @@
-# Winnow: MCP Tools Specification
+# Winnow: MCP Tools Reference
 
 ## Overview
 
-Winnow exposes MCP tools to agents for context management. Inspired by the original development MCP, but with key differences.
+Winnow exposes MCP tools over HTTP+SSE for AI agents to manage context. Tools are organized into four categories: **session lifecycle**, **purpose-built writes**, **reads and search**, and **project management**.
 
-### Comparison to The Original Development MCP
+All tools require `Authorization: Bearer <api-key>` configured once in your MCP client.
 
-| The Original MCP | Winnow |
-|-----------------|-----------|
-| `search_docs` | `search_context` (semantic, grouped by query_key, includes recency) |
-| `read_file` | `read_context` (structured chunks, with version history) |
-| `write_doc` | `write_context` (structured, with versioning) |
-| `add_doc_review` | `review_context` (quality tracking) |
-| — | `update_context` (edit existing, creates new version) |
-| — | `get_context_versions` (view version history) |
-| — | `compact_context` (summarize and compress) |
+### Tool Availability by Agent Type
 
-### Key Differences
+Not all agents see all tools. The `tools/list` response is filtered by the agent's registered type:
 
-1. **Structured context chunks** — Not flat markdown; includes gotchas, related keys, source references
-2. **Context compaction** — Unique to Winnow; prevents the "dumb zone"
-3. **Review system** — Tracks quality, feeds back into improving context
-4. **Persistent storage** — Context survives sessions, compounds over time
+| Tool Category | dev | admin | research | orchestrator |
+|--------------|-----|-------|----------|--------------|
+| Session lifecycle | ✅ | ✅ | ✅ | ✅ |
+| Read/search/compact | ✅ | ✅ | ✅ | ✅ |
+| Write tools | ✅ | ✅ | ✅ | ✅ |
+| Review | ✅ | ✅ | ✅ | ✅ |
+| Project management | ❌ | ✅ | ❌ | ✅ |
 
 ---
 
-## Tool: write_context
+## Session Lifecycle Tools
 
-**Purpose:** Agent writes research findings as a context chunk
+### start_session
 
-**When to use:**
-- After researching a codebase area
-- When discovering patterns, gotchas, or key files
-- When onboarding and learning something new
+Start a new agent work session. Returns a `session_id` and triggers injection of always-inject chunks (identity, conventions, principles).
 
 **Input:**
 ```json
 {
-  "query_key": "string",       // grouping key, e.g., "auth-system"
-  "title": "string",           // short descriptive title
-  "content": "string",         // the context (markdown or structured)
-  "source_file": "string?",    // optional: relevant file path
-  "source_lines": "[int, int]?", // optional: line numbers
-  "gotchas": ["string"]?,      // optional: warnings for future agents
-  "related": ["string"]?       // optional: related context query_keys
+  "lifecycle_slug": "dev",       // optional: agent type preset (dev, admin, research, orchestrator)
+  "project_id": "uuid"           // optional: primary project for this session
 }
 ```
 
-**Output:**
-```json
-{
-  "id": "ctx_abc123",
-  "query_key": "auth-system",
-  "title": "Session handling pattern",
-  "created_at": "2026-03-08T12:00:00Z"
-}
-```
+**Output:** `{ "session_id": "uuid" }`
 
-**Example Usage:**
-```
-The agent has been researching how authentication works:
+### resume_session
 
-write_context(
-  query_key: "auth-system",
-  title: "Session-based auth with Warden",
-  content: "Auth uses Warden with database strategy. User model has:\n- `session_key` (uuid)\n- `last_session_at` (datetime)\nSession expires after 30 days of inactivity.",
-  source_file: "app/models/user.rb",
-  source_lines: [120, 180],
-  gotchas: [
-    "No remember_token support - users must log in each visit",
-    "Session cleanup runs daily at 3am UTC"
-  ],
-  related: ["api-auth", "payment-tokens"]
-)
-```
+Resume a previously started session (e.g., after agent restart).
 
----
+**Input:** `{ "session_id": "uuid" }`
 
-## Tool: search_context
+### get_active_session
 
-**Purpose:** Find relevant context chunks via query
+Check if the current agent has an active session. Useful for session recovery after crashes.
 
-**When to use:**
-- Starting a new task
-- Before writing code in an unfamiliar area
-- When unsure if context already exists
+**Input:** none
+
+**Output:** `{ "session_id": "uuid", ... }` or empty if no active session.
+
+### register_focus
+
+Tell Winnow what you're working on. Enables future SSE notifications when other agents write context relevant to your focus.
 
 **Input:**
 ```json
 {
-  "query": "string",    // search query
-  "limit": 10,          // optional: max results (default: 10)
-  "query_key": "string?" // optional: filter by specific context group
+  "session_id": "uuid",
+  "task": "implementing billing webhooks",
+  "project_id": "uuid"
+}
+```
+
+### end_session
+
+End the current session. Returns MEMORY-typed chunks written during the session for review and promotion.
+
+**Input:** `{ "session_id": "uuid" }`
+
+**Output:** List of MEMORY chunks from this session (consolidation_behavior=SURFACE).
+
+---
+
+## Purpose-Built Write Tools
+
+Six tools replace the generic `write_context`. The tool name communicates intent and automatically routes to the correct scope + injection behavior.
+
+### write_identity
+
+**Scope:** AGENT | **Always Inject:** yes | **Chunk Type:** IDENTITY
+
+Who this agent is — role, values, responsibilities, relationships.
+
+**When to use:** Initial provisioning, or when role/responsibilities meaningfully change.
+**Do NOT use:** After every session, for task-specific observations, to record what you just did.
+
+**Input:**
+```json
+{
+  "query_key": "seth-identity",
+  "title": "Seth — Junior Developer",
+  "content": "I'm the junior developer at XferOps...",
+  "agent_id": "uuid"
+}
+```
+
+### write_memory
+
+**Scope:** AGENT | **Always Inject:** no | **Chunk Type:** MEMORY
+
+Episodic notes — personal observations, learned patterns, past experiences.
+
+**When to use:** At decision points during work, after discovering a gotcha, after completing a task.
+
+**Input:**
+```json
+{
+  "query_key": "auth-middleware-silent-fail",
+  "title": "Auth middleware fails silently without tenant resolver",
+  "content": "When auth middleware runs before the tenant resolver, it fails silently...",
+  "agent_id": "uuid",
+  "source_file": "internal/middleware/auth.go",
+  "gotchas": ["No error logged — request just returns 401"]
+}
+```
+
+### write_knowledge
+
+**Scope:** PROJECT | **Always Inject:** no | **Chunk Type:** KNOWLEDGE
+
+Project facts — architecture, patterns, conventions, deployment docs.
+
+**When to use:** Seeding, researching, after learning something worth sharing with the team.
+
+**Input:**
+```json
+{
+  "query_key": "auth-shared-cookie",
+  "title": "Auth uses NextAuth v5 with shared cookie at .xferops.dev",
+  "content": "All XferOps apps share a single auth cookie...",
+  "project_id": "uuid",
+  "source_file": "src/auth/config.ts",
+  "source_lines": [42, 67],
+  "gotchas": ["Cookie domain must match — .xferops.dev, not .xferops.com"],
+  "related": ["auth-middleware", "tenant-resolution"]
+}
+```
+
+### write_convention
+
+**Scope:** PROJECT | **Always Inject:** yes | **Chunk Type:** CONVENTION
+
+Foundational project rules — always in context once a project is activated.
+
+**When to use:** Recording rules every agent must always know, that will remain true for months.
+**Do NOT use:** For facts that change, for things only some agents need, for task outcomes.
+
+**Input:**
+```json
+{
+  "query_key": "pr-required",
+  "title": "All changes require a PR — never push to main",
+  "content": "Every code change must go through a pull request...",
+  "project_id": "uuid"
+}
+```
+
+### write_org_knowledge
+
+**Scope:** ORG | **Always Inject:** no | **Chunk Type:** KNOWLEDGE
+
+Org-wide facts retrieved on demand — team composition, product history, strategic context.
+
+**Input:**
+```json
+{
+  "query_key": "team-composition",
+  "title": "XferOps has four AI agents",
+  "content": "Adam (orchestrator), Marcus (security), Quinn (QA), Seth (junior dev)...",
+  "org_id": "uuid"
+}
+```
+
+### store_principle
+
+**Scope:** ORG | **Always Inject:** yes | **Chunk Type:** PRINCIPLE
+
+Org-wide values and norms — always in context for all agents in the org.
+
+**⚠️ Requires `promoted_by_user_id`.** Agents should SUGGEST principles via `write_org_knowledge`, not write them unilaterally. A human must explicitly promote.
+
+**Input:**
+```json
+{
+  "query_key": "simplicity-over-cleverness",
+  "title": "We prefer simplicity over cleverness",
+  "content": "When choosing between a clever solution and a simple one, choose simple...",
+  "org_id": "uuid",
+  "promoted_by_user_id": "uuid"
+}
+```
+
+### write_context (deprecated)
+
+Legacy tool. Defaults to `scope=PROJECT`, `always_inject=false` (equivalent to `write_knowledge`). Use purpose-built tools instead.
+
+**Input:**
+```json
+{
+  "query_key": "string",
+  "title": "string",
+  "content": "string",
+  "project_id": "uuid",
+  "source_file": "string?",
+  "source_lines": "[int, int]?",
+  "gotchas": ["string"]?,
+  "related": ["string"]?,
+  "scope": "PROJECT|AGENT|ORG",
+  "always_inject": false,
+  "chunk_type": "KNOWLEDGE"
+}
+```
+
+---
+
+## Read and Search Tools
+
+### search_context
+
+Semantic search across accessible chunks. Supports filtering by scope, chunk type, agent, project, org, and always_inject status.
+
+**Input:**
+```json
+{
+  "query": "how does authentication work",
+  "project_id": "uuid",        // filter to PROJECT scope
+  "agent_id": "uuid",          // filter to AGENT scope
+  "org_id": "uuid",            // filter to ORG scope
+  "scope": "PROJECT",          // filter to specific scope
+  "chunk_type": "KNOWLEDGE",   // filter by chunk type
+  "always_inject_only": true,  // only always_inject chunks
+  "query_key": "auth-flow",    // filter by exact query_key
+  "limit": 10                  // max results (default 10)
 }
 ```
 
@@ -100,304 +241,146 @@ write_context(
 {
   "results": [
     {
-      "id": "ctx_abc123",
-      "query_key": "auth-system",
-      "title": "Session-based auth with Warden",
-      "content": "Auth uses Warden with database strategy...",
-      "source_file": "app/models/user.rb",
-      "source_lines": [120, 180],
+      "id": "uuid",
+      "query_key": "auth-shared-cookie",
+      "title": "Auth uses NextAuth v5 with shared cookie",
+      "content": "...",
+      "scope": "PROJECT",
+      "chunk_type": "KNOWLEDGE",
+      "always_inject": false,
       "score": 0.95,
-      "created_at": "2026-03-08T12:00:00Z",
-      "updated_at": "2026-03-08T14:30:00Z",
+      "source_file": "src/auth/config.ts",
+      "created_at": "2026-03-19T12:00:00Z",
+      "updated_at": "2026-03-19T14:30:00Z",
       "version": 2
-    },
-    ...
+    }
   ],
   "total": 3
 }
 ```
 
-**Example Usage:**
-```
-search_context(
-  query: "how does payment processing work",
-  limit: 5
-)
-```
+### read_context
 
----
-
-## Tool: read_context
-
-**Purpose:** Get a specific context chunk by ID
-
-**When to use:**
-- After finding relevant chunks via search
-- When you have a context ID and need full details
-- When referencing specific context in planning
+Retrieve a specific chunk by ID or query_key.
 
 **Input:**
 ```json
 {
-  "id": "ctx_abc123"  // context chunk ID
+  "id": "uuid",               // by chunk ID
+  "query_key": "auth-flow",   // OR by query_key (requires project_id)
+  "project_id": "uuid"        // required when reading by query_key
 }
 ```
 
-**Output:**
-```json
-{
-  "id": "ctx_abc123",
-  "query_key": "auth-system",
-  "title": "Session-based auth with Warden",
-  "content": "Auth uses Warden...",
-  "source_file": "app/models/user.rb",
-  "source_lines": [120, 180],
-  "gotchas": [
-    "No remember_token support"
-  ],
-  "related": ["api-auth", "payment-tokens"],
-  "versions": [
-    {"id": "ver_xyz", "created_at": "2026-03-08T12:00:00Z"}
-  ],
-  "created_at": "2026-03-08T12:00:00Z",
-  "updated_at": "2026-03-08T14:30:00Z"
-}
-```
+### get_context_versions
 
----
+View version history of a chunk.
 
-## Tool: compact_context
+**Input:** `{ "id": "uuid", "limit": 10 }`
 
-**Purpose:** Fetch all context chunks matching a query in a single call, optimized for agent-side compaction
+### compact_context
 
-**How it works:** This tool does NOT perform summarization. It returns the raw matching chunks so the agent can summarize them client-side using its own reasoning. The agent then writes the compacted summary back via `write_context`. This keeps all LLM inference on the client — no server-side AI costs or latency.
-
-**When to use:**
-- Before entering the "dumb zone" (after 15-20 min of work)
-- When starting a new phase of work
-- When onboarding a new agent
-- Before ending a session (for future agents to pick up)
+Fetch chunks matching a query for agent-side compaction. **The server does NOT summarize** — it returns raw chunks for the agent to synthesize client-side.
 
 **Input:**
 ```json
 {
-  "query": "string",        // what to compact
-  "limit": 50               // optional: max chunks to return (default: 50)
+  "query": "auth system",
+  "project_id": "uuid",
+  "scope": "PROJECT",
+  "chunk_type": "RESEARCH",
+  "limit": 50
 }
 ```
 
-**Output:**
-```json
-{
-  "chunks": [
-    {
-      "id": "ctx_abc123",
-      "query_key": "auth-system",
-      "title": "Session-based auth with Warden",
-      "content": "Auth uses Warden with database strategy...",
-      "source_file": "app/models/user.rb",
-      "source_lines": [120, 180],
-      "gotchas": ["No remember_token support - users must log in each visit"],
-      "related": ["api-auth", "payment-tokens"],
-      "version": 2,
-      "created_at": "2026-03-08T12:00:00Z",
-      "updated_at": "2026-03-08T14:30:00Z"
-    },
-    {
-      "id": "ctx_def456",
-      "query_key": "auth-system",
-      "title": "Warden strategy configuration",
-      "content": "Database strategy configured in...",
-      "source_file": "config/initializers/warden.rb",
-      "source_lines": [10, 30],
-      "gotchas": ["Session cleanup runs daily at 3am UTC"],
-      "related": ["auth-system"],
-      "version": 1,
-      "created_at": "2026-03-08T13:00:00Z",
-      "updated_at": "2026-03-08T13:00:00Z"
-    }
-  ],
-  "total": 2
-}
-```
-
-**Expected agent workflow after calling this tool:**
-1. Call `compact_context` to fetch all related chunks
-2. Agent summarizes the chunks in its own context (what, files, gotchas, gaps, related)
-3. Agent writes the compacted summary back via `write_context` with a descriptive `query_key`
-
-**Example Usage:**
-```
-compact_context(
-  query: "auth system",
-  limit: 20
-)
-```
+**Expected workflow after calling:**
+1. Agent reviews returned chunks
+2. Agent summarizes into a new, higher-signal chunk
+3. Agent writes the summary back via `write_knowledge` (or appropriate tool)
+4. Agent optionally deletes or supersedes the original chunks
 
 ---
 
-## Tool: update_context
+## Update and Delete Tools
 
-**Purpose:** Update an existing context chunk (creates new version, preserves history)
+### update_context
 
-**When to use:**
-- Context is outdated or incomplete
-- Adding new findings to existing context
-- Fixing incorrect information
+Versioned update to an existing chunk. Creates a new version while preserving history.
 
 **Input:**
 ```json
 {
-  "id": "ctx_abc123",           // chunk to update
-  "title": "string?",           // optional new title
-  "content": "string?",         // optional new content
-  "source_file": "string?",     // optional new source
-  "source_lines": "[int, int]?", // optional new lines
-  "gotchas": ["string"]?,       // optional new gotchas
-  "related": ["string"]?,       // optional new related keys
-  "change_note": "string"       // brief note about what changed
+  "id": "uuid",
+  "title": "string?",
+  "content": "string?",
+  "source_file": "string?",
+  "source_lines": "[int, int]?",
+  "gotchas": ["string"]?,
+  "related": ["string"]?,
+  "change_note": "Added password reset info"
 }
 ```
 
-**Output:**
-```json
-{
-  "id": "ctx_abc123",
-  "version": 3,
-  "updated_at": "2026-03-08T16:00:00Z"
-}
-```
+### delete_context
 
-**Example Usage:**
-```
-update_context(
-  id: "ctx_abc123",
-  content: "Auth uses Warden with database strategy. User model has:\n
-    session_key (uuid)\n
-    last_session_at (datetime)\n
-    Added: reset_password_token for password resets",
-  gotchas: [
-    "No remember_token support - users must log in each visit",
-    "Session cleanup runs daily at 3am UTC",
-    "Password reset token expires after 6 hours (NEW)"
-  ],
-  change_note: "Added password reset info from recent work"
-)
-```
+Remove a chunk.
+
+**Input:** `{ "id": "uuid" }`
 
 ---
 
-## Tool: get_context_versions
+## Review Tool
 
-**Purpose:** View version history of a context chunk
+### review_context
 
-**When to use:**
-- Understanding how context has evolved
-- Recovering older (correct) information
-- Reviewing what changed between versions
+Rate chunk quality after using it. Follows the `add_doc_review` pattern from the original development MCP.
 
 **Input:**
 ```json
 {
-  "id": "ctx_abc123",    // context chunk ID
-  "limit": 10            // optional: max versions to return
+  "chunk_id": "uuid",
+  "task": "Added password reset functionality",
+  "usefulness": 4,
+  "usefulness_note": "Gotchas about token expiry were helpful",
+  "correctness": 5,
+  "correctness_note": "All info was accurate",
+  "action": "useful"
 }
 ```
 
-**Output:**
-```json
-{
-  "versions": [
-    {
-      "version": 3,
-      "change_note": "Added password reset info",
-      "created_at": "2026-03-08T16:00:00Z"
-    },
-    {
-      "version": 2,
-      "change_note": "Added session cleanup gotcha",
-      "created_at": "2026-03-08T14:30:00Z"
-    },
-    {
-      "version": 1,
-      "change_note": "Initial context",
-      "created_at": "2026-03-08T12:00:00Z"
-    }
-  ]
-}
-```
+**Actions:** `useful`, `needs_update`, `outdated`, `incorrect`
 
 ---
 
-## Tool: review_context
+## Project Management Tools
 
-**Purpose:** Add a quality review to a context chunk (inspired by the original development MCP's `add_doc_review`)
+Available only to `admin` and `orchestrator` agent types.
 
-**When to use:**
-- After using context that helped (or didn't help) with a task
-- When user provides feedback on agent generation (context may be partially to blame)
-- Periodic quality audits
+### list_projects
+
+List all projects the agent has access to.
+
+### list_agents
+
+List all agents in the org.
+
+### create_project
+
+Create a new project.
 
 **Input:**
 ```json
 {
-  "chunk_id": "ctx_abc123",   // context chunk being reviewed
-  "task": "string",           // what the agent was working on
-  "usefulness": 1-5,          // usefulness rating
-  "usefulness_note": "string?", // optional note
-  "correctness": 1-5,         // accuracy rating
-  "correctness_note": "string?", // optional note
-  "action": "string"          // 'useful', 'needs_update', 'outdated', 'incorrect'
+  "name": "My Project",
+  "slug": "my-project"
 }
 ```
 
-**Output:**
-```json
-{
-  "id": "rev_xyz789",
-  "chunk_id": "ctx_abc123",
-  "created_at": "2026-03-08T15:00:00Z"
-}
-```
+### add_agent_to_project / remove_agent_from_project
 
-**Example Usage:**
-```
-The agent just completed a task using context about auth. Now reviewing:
+Manage agent-project assignments.
 
-review_context(
-  chunk_id: "ctx_abc123",
-  task: "Added password reset functionality",
-  usefulness: 4,
-  usefulness_note: "Gotchas about token expiry were very helpful",
-  correctness: 5,
-  action: "useful"
-)
-```
-
----
-
-## Tool: delete_context
-
-**Purpose:** Remove a context chunk
-
-**When to use:**
-- Context is outdated or incorrect
-- Cleaning up temporary research
-
-**Input:**
-```json
-{
-  "id": "ctx_abc123"
-}
-```
-
-**Output:**
-```json
-{
-  "deleted": true,
-  "id": "ctx_abc123"
-}
-```
+**Input:** `{ "agent_id": "uuid", "project_id": "uuid" }`
 
 ---
 
@@ -424,14 +407,4 @@ All tools return errors in standard format:
 
 ---
 
-## Related Docs
-
-- [Problem & Sources](./01-problem-sources.md)
-- [Architecture](./02-architecture.md)
-- [Skills](./04-skills.md)
-- [Workflows](./05-workflows.md)
-
----
-
-*Last updated: 2026-03-08*
-*Status: Draft / Iterating*
+*Last updated: 2026-03-19*

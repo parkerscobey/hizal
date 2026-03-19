@@ -1,197 +1,241 @@
-# Winnow Agent Onboarding Guide
+# Agent Onboarding & Provisioning Guide
 
-This guide is for an AI agent being onboarded to Winnow itself.
+This guide covers two flows: **human provisioning** (setting up a new agent) and **agent self-setup** (for self-hosters using MCP tools directly).
 
-Winnow is a context management platform for AI coding agents. Its job is to help agents stay effective in large codebases by storing research as structured, searchable context instead of forcing every new session to rediscover everything from scratch.
+---
 
-## What This Application Does
+## Understanding Scope
 
-Winnow provides:
+Before provisioning, understand the three scopes:
 
-- An HTTP API for orgs, projects, agents, memberships, and API keys
-- An MCP server over HTTP+SSE so coding agents can use Winnow tools directly
-- A Postgres-backed store of versioned context chunks with embeddings
-- Workflows for research, planning, compaction, review, and handoff
+| Scope | What it stores | Who sees it | Example |
+|-------|---------------|------------|---------|
+| **PROJECT** | What the project knows — shared, factual, technical | All agents on this project | Architecture docs, API patterns, deploy config |
+| **AGENT** | What this agent knows — personal, interpretive, identity | Only this agent | Observations, preferences, working patterns |
+| **ORG** | What the org believes — shared values, principles, norms | All agents in the org | Team values, cross-project standards |
 
-The core product idea is simple:
+### always_inject
 
-1. An agent researches a topic.
-2. The agent writes what it learned as a context chunk.
-3. Later agents search and reuse that chunk.
-4. When context becomes noisy or stale, agents compact or update it.
-5. After using context, agents review it so the knowledge base improves over time.
+Orthogonal to scope. Chunks with `always_inject=true` are surfaced automatically — they don't need to be searched for. They form the behavioral baseline.
 
-Important architectural constraint: Winnow does not do server-side summarization. The server stores, searches, versions, and returns chunks. The agent performs synthesis client-side and writes improved context back.
+| Scope + always_inject | Tool | Use |
+|----------------------|------|-----|
+| PROJECT + always_inject | `write_convention` | Foundational rules every agent must know |
+| PROJECT + on-demand | `write_knowledge` | Facts retrieved when relevant |
+| AGENT + always_inject | `write_identity` | Who this agent is |
+| AGENT + on-demand | `write_memory` | Episodic observations |
+| ORG + always_inject | `store_principle` | Org-wide values for all agents |
+| ORG + on-demand | `write_org_knowledge` | Org facts retrieved when relevant |
 
-## Core Domain Model
+---
 
-The main persisted entities are:
+## Human Provisioning (via Wizard — coming soon)
 
-- `orgs`: top-level tenant boundary
-- `users`: human users
-- `projects`: project-level context boundary
-- `project_memberships`: human access to projects
-- `agents`: named agent records owned inside an org
-- `agent_projects`: projects an agent is assigned to
-- `api_keys`: bearer keys used for MCP and context access
-- `context_chunks`: versioned knowledge units scoped to a project
-- `context_chunk_versions`: historical versions of each chunk
-- `context_reviews`: usefulness/correctness reviews on chunks
+The provisioning wizard walks through these steps:
 
-The most important operational boundary is the `project`. Context is written and searched within a project scope.
+### Step 1: Agent Basics
+- Name, type (dev / admin / research / orchestrator / custom)
+- Enable memory toggle (`memory_enabled`) — enables `write_identity` and `write_memory`
+- Platform (OpenClaw / Cursor / Claude Code / OpenCode / Custom)
 
-## How Agents Are Expected To Work
+### Step 2: Identity Setup
+Guided prompts generate `write_identity` chunks:
+- What is this agent's role?
+- What projects will they work on?
+- Who do they coordinate with?
+- What are their core working principles?
 
-An agent should not start by reading random files. It should use Winnow first.
+Preview the always_inject identity chunk before writing.
 
-Default operating loop:
+### Step 3: Org Principles (if none exist)
+Only shown if the org has no `store_principle` chunks:
+- Guided prompts: what does your org always believe?
+- Each principle previewed and confirmed by a human before writing
+- Agents can only suggest — human must confirm
 
-1. `search_context` for the topic or subsystem.
-2. `read_context` for the most relevant chunks.
-3. If context is missing, stale, or incomplete, inspect the codebase and write a new chunk with `write_context` or fix an existing one with `update_context`.
-4. Before a handoff, after a long session, or when working memory gets crowded, call `compact_context`, summarize the returned chunks client-side, and write back a compacted summary.
-5. After using context to complete work, call `review_context` to rate usefulness and correctness.
+### Step 4: Project Connections
+- Which projects will this agent work on?
+- For each project: does it have `write_convention` chunks?
+  - If yes: show them so the human knows what the agent will always see
+  - If no: prompt to add at least one foundational convention
 
-This is the intended workflow reflected in `docs/03-mcp-tools.md`, `docs/04-skills.md`, and `docs/05-workflows.md`.
+### Step 5: Behavior Driver Output
+Generate a ready-to-copy AGENTS.md snippet tailored to this agent:
+- Winnow MCP config
+- When to call each tool
+- Consolidation instructions
+- Session recovery guidance
 
-## MCP Tools You Can Use
+### Step 6: API Key
+- Generate an agent-scoped API key
+- Show MCP config snippet (JSON + TOML) ready to paste
 
-Implemented MCP tools:
+---
 
-- `search_context`
-- `read_context`
-- `write_context`
-- `update_context`
-- `get_context_versions`
-- `compact_context`
-- `review_context`
-- `delete_context`
+## Agent Self-Setup (CLI / Self-Hosted)
 
-Current schema is structured around:
+For self-hosters who want to provision agents manually using MCP tools.
 
-- `query_key`
-- `title`
-- `content`
-- `source_file`
-- `source_lines`
-- `gotchas`
-- `related`
+### 1. Connect to Winnow MCP
 
-Do not assume tag-based or free-form document APIs. Winnow stores structured chunks, not generic notes.
-
-## Current Auth And Project Scoping Behavior
-
-Winnow exposes MCP at `/mcp` and expects a bearer API key in `Authorization`.
-
-Project scoping matters:
-
-- Context operations require a project scope.
-- For MCP tools, pass `project_id` in tool arguments.
-- Context REST routes still accept `project_id` query param or `X-Project-ID` header.
-
-For practical onboarding, each agent should be treated as operating in one explicit project context at a time.
-
-Recommended MCP config shape for Codex CLI:
-
-```toml
-[mcp_servers.winnow]
-url = "https://winnow-api.xferops.dev/mcp"
-http_headers = { Authorization = "Bearer <agent-api-key>" }
-```
-
-Recommended MCP config shape for JSON-based clients:
-
+**JSON MCP clients (Claude Desktop, Cursor, OpenClaw, OpenCode):**
 ```json
 {
   "mcpServers": {
     "winnow": {
       "url": "https://winnow-api.xferops.dev/mcp",
       "headers": {
-        "Authorization": "Bearer <agent-api-key>"
+        "Authorization": "Bearer ctx_your-org_YOUR_KEY_HERE"
       }
     }
   }
 }
 ```
 
-## How To Onboard A New Agent
+**Codex CLI (config.toml):**
+```toml
+[mcp_servers.winnow]
+url = "https://winnow-api.xferops.dev/mcp"
+http_headers = { Authorization = "Bearer ctx_your-org_YOUR_KEY_HERE" }
+```
 
-When a new agent starts on a project:
+### 2. Set Up Identity
 
-1. Connect to the Winnow MCP server with the agent API key.
-2. Inspect `available_projects` from onboarding or call `list_projects`.
-3. Pass the selected `project_id` on MCP tool calls.
-4. **Check if the project has context:** `search_context(query="*", limit=5)`.
-5. **If the project is empty or sparse, use the `winnow-seed` skill first.** This is the most critical step — without foundational context, all other workflows have nothing to build on. The seed skill walks you through scanning the codebase, planning a taxonomy, and writing structured chunks.
-6. If context exists, search for high-level project context first:
-   - architecture
-   - auth
-   - data model
-   - deployment
-   - current roadmap or recent changes
-7. Read the top results and build a mental model before touching code.
-8. If foundational context is missing in specific areas, create it immediately using `winnow-research`.
-9. During work, keep chunks narrow and factual. One chunk should usually describe one concept, subsystem, flow, or decision.
-10. At handoff, compact the relevant topic and write a summary chunk for the next agent.
+```
+write_identity(
+  query_key="agent-identity",
+  title="[Agent Name] — [Role]",
+  content="I'm [name], the [role] at [org]. My responsibilities include...
+    I coordinate with [team members]. My working principles are...
+    I focus on [project areas].",
+  agent_id="<agent-uuid>"
+)
+```
 
-## What Good Context Looks Like
+This chunk is `always_inject=true` — it will be in every session automatically.
 
-A useful context chunk should answer:
+**Guideline:** Set identity once at provisioning. Update only when role or core values meaningfully change. Updating more than once a month is a signal something is wrong.
 
-- What is this subsystem or decision?
-- Which files matter?
-- What are the gotchas?
-- What related topics should a future agent inspect next?
+### 3. Set Up Org Principles (if needed)
 
-Preferred chunk shape:
+First, check what exists:
+```
+search_context(scope="ORG", always_inject_only=true, org_id="<org-uuid>")
+```
 
-- `query_key`: stable grouping key such as `auth-middleware` or `project-memberships`
-- `title`: short descriptive summary
-- `content`: concise explanation of the implementation or decision
-- `source_file` and `source_lines`: concrete trace back into the codebase
-- `gotchas`: edge cases, permissions, stale-doc risks, hidden constraints
-- `related`: neighboring query keys or chunks
+If no principles exist, propose them via `write_org_knowledge` first, then have a human promote:
+```
+store_principle(
+  query_key="simplicity-over-cleverness",
+  title="We prefer simplicity over cleverness",
+  content="When choosing between a clever solution and a simple one, choose simple...",
+  org_id="<org-uuid>",
+  promoted_by_user_id="<human-uuid>"
+)
+```
 
-## Recommended Operating Rules For Agents
+**Guideline:** Principles are always in context for every agent. Keep them few and durable. Never write unilaterally from a single observation.
 
-- **Seed before everything else.** If a project is empty, use `winnow-seed` to populate it. An empty knowledge base makes all other workflows ineffective.
-- Search before writing. Duplicate chunks reduce retrieval quality.
-- Prefer updating an existing chunk over creating a second chunk with overlapping facts.
-- Include concrete file references whenever the knowledge came from the codebase.
-- Use compaction aggressively. The point is to preserve learning without carrying every detail in-session.
-- Review context after using it. Winnow is supposed to improve over repeated use.
-- If a chunk seems foundational, inspect version history before trusting it blindly.
+### 4. Connect to Projects
 
-## Important Reality Check About `skills/`
+```
+list_projects()
+```
 
-The local `skills/` directory is useful as workflow guidance, but several examples are not aligned with the currently implemented MCP schema.
+For each project, check conventions:
+```
+search_context(project_id="<project-uuid>", always_inject_only=true)
+```
 
-Examples of mismatch:
+If no conventions exist, add at least one foundational rule:
+```
+write_convention(
+  query_key="pr-required",
+  title="All changes require a PR",
+  content="Never push directly to main. Every change goes through a pull request...",
+  project_id="<project-uuid>"
+)
+```
 
-- Some skills show `projectId` in tool arguments. The implemented MCP server expects `project_id` on MCP tool calls.
-- Some skills use fields like `tags` or `source`. The implemented tool schema uses `query_key`, `title`, `content`, `source_file`, `source_lines`, `gotchas`, and `related`.
-- Some skills describe `compact_context(ids=[...])`. The implemented tool accepts a semantic `query` and returns matching chunks for agent-side summarization.
-- Some review examples use a single `rating`. The implemented review flow tracks usefulness, correctness, notes, and an action.
+### 5. Configure AGENTS.md
 
-Treat the `skills/` files as workflow intent, not as the exact API contract. When there is a conflict, follow the implemented handlers and MCP schemas.
+Add Winnow session lifecycle to your agent's AGENTS.md or equivalent:
 
-## Suggested System Prompt For A Winnow-Connected Agent
+```markdown
+## Every Session
 
-Use Winnow as your first stop for project knowledge. Before exploring the codebase, search existing context and read the most relevant chunks. If context is missing, stale, or incomplete, research the code and write or update structured chunks with file references and gotchas. Before handoff or after a long session, compact the relevant topic and write back a summary. After relying on context to complete work, review its usefulness and correctness.
+1. Check for active session: `get_active_session()`
+2. If none, start one: `start_session(lifecycle_slug="dev")`
+3. Identity + conventions + principles are now in context
+4. Register focus: `register_focus(task="...", project_id="...")`
 
-## Seeding A New Project
+## During Work
 
-If the knowledge base is empty or sparse, use the `winnow-seed` skill. It provides a complete workflow for scanning a codebase and writing structured chunks across a planned taxonomy.
+- Search before writing: `search_context(query="...", project_id="...")`
+- Write findings: `write_knowledge(...)` for project facts
+- Write observations: `write_memory(...)` for personal notes
 
-The seed skill will guide you to cover these essential areas:
+## End of Session
 
-- Project architecture overview
-- Domain model and entity glossary
-- Authentication and authorization model
-- API routes and middleware
-- Database schema and migrations
-- Code patterns and conventions
-- Frontend patterns (if applicable)
-- Deployment and CI/CD pipeline
+- Compact if needed: `winnow-compact`
+- Review used chunks: `winnow-review`
+- End session: `end_session(session_id="...")`
+```
 
-These give a new agent enough structure to become useful quickly. See `skills/winnow-seed/SKILL.md` for the full workflow.
+### 6. Generate API Key
+
+Via REST API:
+```bash
+curl -X POST https://winnow-api.xferops.dev/v1/keys \
+  -H "Content-Type: application/json" \
+  -d '{"org_slug": "your-org", "name": "agent-name"}'
+```
+
+Save the key — it's only shown once.
+
+---
+
+## What Good Identity Looks Like
+
+A useful identity chunk should cover:
+- **Role:** What this agent does in the org
+- **Responsibilities:** Specific areas of ownership
+- **Relationships:** Who they coordinate with
+- **Principles:** How they approach work
+- **Boundaries:** What they don't do
+
+**Example:**
+```
+I'm Seth, the junior developer at XferOps. My responsibilities include
+picking up feature tickets, writing code and tests, and creating PRs.
+I coordinate with Adam (orchestrator), Quinn (QA), and Marcus (security).
+
+My working principles:
+- Read the codebase before writing code — understand existing patterns
+- Ask when unsure — being wrong quietly is worse than asking loudly
+- Never push to main — always create a PR
+- Write tests alongside features, not after
+
+I don't touch infrastructure, IAM, or production deployments.
+```
+
+---
+
+## Always-Inject Guardrails
+
+Before writing any always-inject chunk (`write_identity`, `write_convention`, `store_principle`), apply the three-question test:
+
+1. **Will this still be true and relevant in 6 months?**
+2. **Does every agent (or this agent in every session) need to know this?**
+3. **Would NOT knowing this cause a meaningful mistake?**
+
+If any answer is no — use the on-demand equivalent (`write_knowledge`, `write_memory`, `write_org_knowledge`) instead.
+
+**Rule of thumb by tool:**
+- `write_identity`: Set once at provisioning. Update only when role or core values meaningfully change.
+- `write_convention`: Foundational rules only. If a human would put it in a permanent README section titled "Rules," it belongs here.
+- `store_principle`: Requires human intent. Agents should propose, humans promote.
+
+---
+
+*Last updated: 2026-03-19*
