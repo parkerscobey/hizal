@@ -82,7 +82,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_context",
-		Description: "Store a context chunk with embedding for later retrieval. DEPRECATED: Use purpose-built tools (write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle) instead.",
+		Description: "Store a context chunk with embedding for later retrieval. DEPRECATED: Use purpose-built tools (write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle) or write_chunk for custom org types.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -197,7 +197,7 @@ var toolList = []toolSchema{
 			"properties": map[string]interface{}{
 				"org_id":              map[string]interface{}{"type": "string", "description": "Org UUID to scope this principle"},
 				"query_key":           map[string]interface{}{"type": "string", "description": "Unique key for this principle topic"},
-				"title":               map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"title":               map[string]interface{}{"type": "string", "description": "Principle content"},
 				"content":             map[string]interface{}{"type": "string", "description": "Principle content"},
 				"promoted_by_user_id": map[string]interface{}{"type": "string", "description": "User ID of the human who promoted this principle (required)"},
 				"source_file":         map[string]interface{}{"type": "string", "description": "Source file path"},
@@ -206,6 +206,29 @@ var toolList = []toolSchema{
 				"related":             map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
 			},
 			"required": []string{"org_id", "query_key", "title", "content", "promoted_by_user_id"},
+		},
+	},
+	{
+		Name:        "write_chunk",
+		Description: "Generic chunk writing tool. Looks up the type's scope and always_inject defaults from the chunk_types table, then applies any overrides. Use this for custom org chunk types. The six named tools (write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle) remain for the 12 global defaults — they're opinionated shortcuts that guarantee correct semantics.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"type":           map[string]interface{}{"type": "string", "description": "Chunk type slug (e.g. KNOWLEDGE, MEMORY, SPEC). Must be a valid type for the org."},
+				"query_key":      map[string]interface{}{"type": "string", "description": "Unique key for this context topic"},
+				"title":          map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":        map[string]interface{}{"type": "string", "description": "Full context content"},
+				"project_id":     map[string]interface{}{"type": "string", "description": "Project UUID — required for PROJECT scope"},
+				"agent_id":       map[string]interface{}{"type": "string", "description": "Agent UUID — required for AGENT scope"},
+				"org_id":         map[string]interface{}{"type": "string", "description": "Org UUID — required for ORG scope"},
+				"always_inject":  map[string]interface{}{"type": "boolean", "description": "Override default_always_inject from chunk_types table"},
+				"scope":          map[string]interface{}{"type": "string", "description": "Override default_scope from chunk_types table (PROJECT | AGENT | ORG)"},
+				"source_file":    map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"type", "query_key", "title", "content"},
 		},
 	},
 	{
@@ -607,6 +630,17 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 			return nil, err
 		}
 		return s.tools.StorePrinciple(ctx, scope.OrgID, in)
+
+	case "write_chunk":
+		var in WriteChunkInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.WriteChunk(ctx, projectID, in)
 
 	case "search_context":
 		var in SearchContextInput
