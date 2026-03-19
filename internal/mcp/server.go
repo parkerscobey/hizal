@@ -531,6 +531,7 @@ type apiKeyScope struct {
 	OrgID             string
 	ScopeAllProjects  bool
 	AllowedProjectIDs []string
+	SearchFilters     models.AgentTypeFilterConfig
 }
 
 func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjectID, name string, args json.RawMessage) (interface{}, error) {
@@ -616,7 +617,11 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.SearchContext(ctx, projectID, in)
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.SearchContext(ctx, projectID, in, scope.SearchFilters)
 
 	case "read_context":
 		var in ReadContextInput
@@ -660,7 +665,11 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.CompactContext(ctx, projectID, in)
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.CompactContext(ctx, projectID, in, scope.SearchFilters)
 
 	case "review_context":
 		var in ReviewContextInput
@@ -805,7 +814,60 @@ func (s *Server) loadAPIKeyScope(ctx context.Context, r *http.Request) (*apiKeyS
 	if err != nil {
 		return nil, fmt.Errorf("invalid API key")
 	}
+
+	if scope.AgentID != nil {
+		scope.SearchFilters = s.resolveAgentSearchFilters(ctx, *scope.AgentID)
+	}
+
 	return scope, nil
+}
+
+func (s *Server) resolveAgentSearchFilters(ctx context.Context, agentID string) models.AgentTypeFilterConfig {
+	var typeSearchFiltersJSON, overridesJSON []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			COALESCE(
+				(SELECT at.search_filters FROM agent_types at WHERE at.id = a.type_id),
+				(SELECT at.search_filters FROM agent_types at WHERE at.slug = 'dev' AND at.org_id IS NULL LIMIT 1),
+				'{}'::jsonb
+			) AS type_search_filters,
+			COALESCE(a.search_filter_overrides, '{}'::jsonb) AS overrides
+		FROM agents a
+		WHERE a.id = $1
+	`, agentID).Scan(&typeSearchFiltersJSON, &overridesJSON)
+	if err != nil {
+		return models.AgentTypeFilterConfig{}
+	}
+
+	var typeFilters, overrides models.AgentTypeFilterConfig
+	json.Unmarshal(typeSearchFiltersJSON, &typeFilters)
+	json.Unmarshal(overridesJSON, &overrides)
+	return mergeSearchFilters(typeFilters, overrides)
+}
+
+func mergeSearchFilters(typeFilters, overrides models.AgentTypeFilterConfig) models.AgentTypeFilterConfig {
+	result := typeFilters
+
+	if len(overrides.IncludeScopes) > 0 {
+		result.IncludeScopes = overrides.IncludeScopes
+	}
+	if len(overrides.ExcludeScopes) > 0 {
+		result.ExcludeScopes = overrides.ExcludeScopes
+	}
+	if len(overrides.IncludeChunkTypes) > 0 {
+		result.IncludeChunkTypes = overrides.IncludeChunkTypes
+	}
+	if len(overrides.ExcludeChunkTypes) > 0 {
+		result.ExcludeChunkTypes = overrides.ExcludeChunkTypes
+	}
+	if len(overrides.ExcludeQueryKeyPrefixes) > 0 {
+		result.ExcludeQueryKeyPrefixes = overrides.ExcludeQueryKeyPrefixes
+	}
+	if overrides.OrgSearchRequiresExplicitScope {
+		result.OrgSearchRequiresExplicitScope = true
+	}
+
+	return result
 }
 
 func (s *Server) queryAccessibleProjects(ctx context.Context, scope *apiKeyScope) ([]serverProject, error) {

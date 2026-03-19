@@ -69,7 +69,8 @@ type Agent struct {
 	InstanceID   *string    `json:"instance_id,omitempty" db:"instance_id"`
 	IPAddress    *string    `json:"ip_address,omitempty" db:"ip_address"`
 	LastActiveAt *time.Time `json:"last_active_at,omitempty" db:"last_active_at"`
-	TypeID       *string    `json:"type_id,omitempty" db:"type_id"`
+	TypeID                  *string               `json:"type_id,omitempty" db:"type_id"`
+	SearchFilterOverrides   AgentTypeFilterConfig `json:"search_filter_overrides" db:"search_filter_overrides"`
 	// MemoryEnabled controls whether this agent can read/write AGENT-scoped chunks.
 	// false (default): knowledge-only — PROJECT + ORG scope only.
 	// true:            full behavior-driven — AGENT scope unlocked (Pro tier).
@@ -198,10 +199,12 @@ type UsageSnapshot struct {
 
 // AgentTypeFilterConfig represents JSONB filters for inject/search behavior.
 type AgentTypeFilterConfig struct {
-	IncludeScopes     []string `json:"include_scopes,omitempty"`
-	ExcludeScopes     []string `json:"exclude_scopes,omitempty"`
-	IncludeChunkTypes []string `json:"include_chunk_types,omitempty"`
-	ExcludeChunkTypes []string `json:"exclude_chunk_types,omitempty"`
+	IncludeScopes               []string `json:"include_scopes,omitempty"`
+	ExcludeScopes               []string `json:"exclude_scopes,omitempty"`
+	IncludeChunkTypes           []string `json:"include_chunk_types,omitempty"`
+	ExcludeChunkTypes           []string `json:"exclude_chunk_types,omitempty"`
+	ExcludeQueryKeyPrefixes     []string `json:"exclude_query_key_prefixes,omitempty"`
+	OrgSearchRequiresExplicitScope bool `json:"org_search_requires_explicit_scope,omitempty"`
 }
 
 // AgentType represents a row in the agent_types table.

@@ -471,7 +471,7 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	}, nil
 }
 
-func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchContextInput) (*SearchContextResult, error) {
+func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchContextInput, typeFilters models.AgentTypeFilterConfig) (*SearchContextResult, error) {
 	if in.Query == "" {
 		return nil, fmt.Errorf("query is required")
 	}
@@ -494,11 +494,17 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	}
 	vec := pgvector.NewVector(emb)
 
+	effectiveScope, effectiveChunkType := applyTypeFilters(in.Scope, in.ChunkType, typeFilters)
+
 	// Build scope-aware WHERE clause.
 	args := []interface{}{vec}
-	scopeClause, args := scopeFilter(in.Scope, effectiveProjectID, agentID, orgID, args)
-	typeClause, args := chunkTypeFilter(in.ChunkType, args)
+	scopeClause, args := scopeFilter(effectiveScope, effectiveProjectID, agentID, orgID, args)
+	typeClause, args := chunkTypeFilter(effectiveChunkType, args)
 	injectClause, args := alwaysInjectFilter(in.AlwaysInjectOnly, args)
+	var excludeQKPClause string
+	if len(typeFilters.ExcludeQueryKeyPrefixes) > 0 {
+		excludeQKPClause = excludeQueryKeyPrefixesClause(typeFilters.ExcludeQueryKeyPrefixes)
+	}
 
 	// last_review_at: most recent review date, or updated_at if no reviews exist.
 	const searchCols = `cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
@@ -520,10 +526,10 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 			SELECT %s
 			FROM context_chunks cc
 			WHERE cc.query_key = $%d
-			%s %s %s
+			%s %s %s %s
 			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
 			LIMIT $%d
-		`, searchCols, qkIdx, scopeClause, typeClause, injectClause, limIdx)
+		`, searchCols, qkIdx, scopeClause, typeClause, injectClause, excludeQKPClause, limIdx)
 		rows, err = pool(t).Query(ctx, query, args...)
 	} else {
 		args = append(args, limit)
@@ -532,10 +538,10 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 			SELECT %s
 			FROM context_chunks cc
 			WHERE TRUE
-			%s %s %s
+			%s %s %s %s
 			ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
 			LIMIT $%d
-		`, searchCols, scopeClause, typeClause, injectClause, limIdx)
+		`, searchCols, scopeClause, typeClause, injectClause, excludeQKPClause, limIdx)
 		rows, err = pool(t).Query(ctx, query, args...)
 	}
 	if err != nil {
@@ -767,7 +773,7 @@ func (t *Tools) GetContextVersions(ctx context.Context, projectID, id string, li
 	return &GetVersionsResult{Versions: versions}, nil
 }
 
-func (t *Tools) CompactContext(ctx context.Context, projectID string, in CompactContextInput) (*CompactContextResult, error) {
+func (t *Tools) CompactContext(ctx context.Context, projectID string, in CompactContextInput, typeFilters models.AgentTypeFilterConfig) (*CompactContextResult, error) {
 	if in.Query == "" {
 		return nil, fmt.Errorf("query is required")
 	}
@@ -787,9 +793,12 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 	}
 	vec := pgvector.NewVector(emb)
 
+	effectiveScope, effectiveChunkType := applyTypeFilters(in.Scope, in.ChunkType, typeFilters)
+
 	args := []interface{}{vec}
-	scopeClause, args := scopeFilter(in.Scope, effectiveProjectID, in.AgentID, in.OrgID, args)
-	typeClause, args := chunkTypeFilter(in.ChunkType, args)
+	scopeClause, args := scopeFilter(effectiveScope, effectiveProjectID, in.AgentID, in.OrgID, args)
+	typeClause, args := chunkTypeFilter(effectiveChunkType, args)
+	excludeQKPClause := excludeQueryKeyPrefixesClause(typeFilters.ExcludeQueryKeyPrefixes)
 	args = append(args, limit)
 	limIdx := len(args)
 
@@ -800,10 +809,10 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 		       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
 		FROM context_chunks cc
 		WHERE TRUE
-		%s %s
+		%s %s %s
 		ORDER BY (cc.embedding IS NULL), cc.embedding <=> $1
 		LIMIT $%d
-	`, scopeClause, typeClause, limIdx)
+	`, scopeClause, typeClause, excludeQKPClause, limIdx)
 
 	rows, err := pool(t).Query(ctx, query, args...)
 	if err != nil {
@@ -1372,6 +1381,59 @@ func alwaysInjectFilter(onlyAlwaysInject bool, args []interface{}) (string, []in
 		return "", args
 	}
 	return "AND cc.always_inject = TRUE", args
+}
+
+func applyTypeFilters(scope, chunkType string, tf models.AgentTypeFilterConfig) (effectiveScope, effectiveChunkType string) {
+	effectiveScope = scope
+	if scope == "" && len(tf.IncludeScopes) > 0 {
+		effectiveScope = tf.IncludeScopes[0]
+	}
+	if effectiveScope != "" {
+		effectiveScope = intersectOneOf(effectiveScope, tf.IncludeScopes)
+	}
+	if tf.OrgSearchRequiresExplicitScope && scope != "ORG" {
+		effectiveScope = removeScope(effectiveScope, "ORG")
+	}
+
+	effectiveChunkType = chunkType
+	if chunkType == "" && len(tf.IncludeChunkTypes) > 0 {
+		effectiveChunkType = tf.IncludeChunkTypes[0]
+	}
+	if effectiveChunkType != "" {
+		effectiveChunkType = intersectOneOf(effectiveChunkType, tf.IncludeChunkTypes)
+	}
+
+	return effectiveScope, effectiveChunkType
+}
+
+func intersectOneOf(value string, allowed []string) string {
+	if len(allowed) == 0 {
+		return value
+	}
+	for _, a := range allowed {
+		if value == a {
+			return value
+		}
+	}
+	return ""
+}
+
+func removeScope(scope, toRemove string) string {
+	if scope == toRemove {
+		return ""
+	}
+	return scope
+}
+
+func excludeQueryKeyPrefixesClause(prefixes []string) string {
+	if len(prefixes) == 0 {
+		return ""
+	}
+	clauses := []string{}
+	for _, p := range prefixes {
+		clauses = append(clauses, fmt.Sprintf("cc.query_key NOT LIKE '%s%%'", p))
+	}
+	return " AND " + strings.Join(clauses, " AND ")
 }
 
 // pgxRows is an alias for the pgx rows interface used in queries.

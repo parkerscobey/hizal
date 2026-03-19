@@ -81,7 +81,7 @@ func (h *Handlers) SearchContext(w http.ResponseWriter, r *http.Request) {
 		ChunkType:        q.Get("chunk_type"),
 		AlwaysInjectOnly: alwaysInjectOnly,
 	}
-	result, err := h.tools.SearchContext(r.Context(), projectID(r), in)
+	result, err := h.tools.SearchContext(r.Context(), projectID(r), in, models.AgentTypeFilterConfig{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "SEARCH_FAILED", err.Error())
 		return
@@ -102,7 +102,7 @@ func (h *Handlers) CompactContext(w http.ResponseWriter, r *http.Request) {
 		OrgID:     q.Get("org_id"),
 		ChunkType: q.Get("chunk_type"),
 	}
-	result, err := h.tools.CompactContext(r.Context(), projectID(r), in)
+	result, err := h.tools.CompactContext(r.Context(), projectID(r), in, models.AgentTypeFilterConfig{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "COMPACT_FAILED", err.Error())
 		return

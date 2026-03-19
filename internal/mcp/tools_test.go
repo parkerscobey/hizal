@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -429,5 +430,173 @@ func TestStorePrincipleGuardrail(t *testing.T) {
 	if !strings.Contains(err.Error(), wantErrMsg) {
 		t.Fatalf("error = %q, want to contain %q", err.Error(), wantErrMsg)
 	}
+}
+
+func TestMergeSearchFilters(t *testing.T) {
+	t.Parallel()
+
+	empty := models.AgentTypeFilterConfig{}
+
+	t.Run("empty overrides returns type filters unchanged", func(t *testing.T) {
+		t.Parallel()
+		typeFilters := models.AgentTypeFilterConfig{
+			IncludeScopes:     []string{"PROJECT", "ORG"},
+			IncludeChunkTypes: []string{"KNOWLEDGE"},
+		}
+		result := mergeSearchFilters(typeFilters, empty)
+		if !slices.Equal(result.IncludeScopes, []string{"PROJECT", "ORG"}) {
+			t.Errorf("IncludeScopes = %v, want [PROJECT, ORG]", result.IncludeScopes)
+		}
+		if !slices.Equal(result.IncludeChunkTypes, []string{"KNOWLEDGE"}) {
+			t.Errorf("IncludeChunkTypes = %v, want [KNOWLEDGE]", result.IncludeChunkTypes)
+		}
+	})
+
+	t.Run("override replaces type filter fields", func(t *testing.T) {
+		t.Parallel()
+		typeFilters := models.AgentTypeFilterConfig{
+			IncludeScopes:     []string{"PROJECT", "ORG"},
+			IncludeChunkTypes: []string{"KNOWLEDGE", "DECISION"},
+		}
+		overrides := models.AgentTypeFilterConfig{
+			IncludeScopes:     []string{"AGENT"},
+			ExcludeScopes:     []string{"PROJECT"},
+			OrgSearchRequiresExplicitScope: true,
+		}
+		result := mergeSearchFilters(typeFilters, overrides)
+		if !slices.Equal(result.IncludeScopes, []string{"AGENT"}) {
+			t.Errorf("IncludeScopes = %v, want [AGENT]", result.IncludeScopes)
+		}
+		if !slices.Equal(result.ExcludeScopes, []string{"PROJECT"}) {
+			t.Errorf("ExcludeScopes = %v, want [PROJECT]", result.ExcludeScopes)
+		}
+		if !result.OrgSearchRequiresExplicitScope {
+			t.Errorf("OrgSearchRequiresExplicitScope = false, want true")
+		}
+	})
+
+	t.Run("empty type filters with overrides returns overrides", func(t *testing.T) {
+		t.Parallel()
+		typeFilters := models.AgentTypeFilterConfig{}
+		overrides := models.AgentTypeFilterConfig{
+			IncludeScopes:     []string{"ORG"},
+			ExcludeQueryKeyPrefixes: []string{"admin-", "financial-"},
+		}
+		result := mergeSearchFilters(typeFilters, overrides)
+		if !slices.Equal(result.IncludeScopes, []string{"ORG"}) {
+			t.Errorf("IncludeScopes = %v, want [ORG]", result.IncludeScopes)
+		}
+		if !slices.Equal(result.ExcludeQueryKeyPrefixes, []string{"admin-", "financial-"}) {
+			t.Errorf("ExcludeQueryKeyPrefixes = %v, want [admin-, financial-]", result.ExcludeQueryKeyPrefixes)
+		}
+	})
+}
+
+func TestApplyTypeFilters(t *testing.T) {
+	t.Parallel()
+
+	empty := models.AgentTypeFilterConfig{}
+
+	t.Run("no type filters means scope unchanged", func(t *testing.T) {
+		t.Parallel()
+		scope, chunkType := applyTypeFilters("PROJECT", "KNOWLEDGE", empty)
+		if scope != "PROJECT" {
+			t.Errorf("scope = %q, want PROJECT", scope)
+		}
+		if chunkType != "KNOWLEDGE" {
+			t.Errorf("chunkType = %q, want KNOWLEDGE", chunkType)
+		}
+	})
+
+	t.Run("empty scope with include_scopes uses first allowed", func(t *testing.T) {
+		t.Parallel()
+		tf := models.AgentTypeFilterConfig{IncludeScopes: []string{"AGENT", "ORG"}}
+		scope, _ := applyTypeFilters("", "", tf)
+		if scope != "AGENT" {
+			t.Errorf("scope = %q, want AGENT (first allowed)", scope)
+		}
+	})
+
+	t.Run("scope outside include_scopes is narrowed to first match", func(t *testing.T) {
+		t.Parallel()
+		tf := models.AgentTypeFilterConfig{IncludeScopes: []string{"PROJECT", "ORG"}}
+		scope, _ := applyTypeFilters("AGENT", "", tf)
+		if scope != "" {
+			t.Errorf("scope = %q, want empty (AGENT not in include_scopes)", scope)
+		}
+	})
+
+	t.Run("org_search_requires_explicit_scope removes ORG when not explicit", func(t *testing.T) {
+		t.Parallel()
+		tf := models.AgentTypeFilterConfig{
+			IncludeScopes: []string{"PROJECT", "ORG"},
+			OrgSearchRequiresExplicitScope: true,
+		}
+		scope, _ := applyTypeFilters("PROJECT", "", tf)
+		if scope != "PROJECT" {
+			t.Errorf("scope = %q, want PROJECT (ORG removed by org_search_requires_explicit_scope)", scope)
+		}
+		scope, _ = applyTypeFilters("ORG", "", tf)
+		if scope != "ORG" {
+			t.Errorf("scope = %q, want ORG (explicit ORG scope allowed)", scope)
+		}
+	})
+
+	t.Run("explicit scope not in include_scopes returns empty", func(t *testing.T) {
+		t.Parallel()
+		tf := models.AgentTypeFilterConfig{IncludeScopes: []string{"PROJECT"}}
+		scope, _ := applyTypeFilters("AGENT", "", tf)
+		if scope != "" {
+			t.Errorf("scope = %q, want empty (AGENT not in type's include_scopes)", scope)
+		}
+	})
+
+	t.Run("chunk_type outside include_chunk_types returns empty", func(t *testing.T) {
+		t.Parallel()
+		tf := models.AgentTypeFilterConfig{IncludeChunkTypes: []string{"KNOWLEDGE", "DECISION"}}
+		_, chunkType := applyTypeFilters("", "RESEARCH", tf)
+		if chunkType != "" {
+			t.Errorf("chunkType = %q, want empty (RESEARCH not in include_chunk_types)", chunkType)
+		}
+	})
+
+	t.Run("chunk_type in include_chunk_types is kept", func(t *testing.T) {
+		t.Parallel()
+		tf := models.AgentTypeFilterConfig{IncludeChunkTypes: []string{"KNOWLEDGE", "DECISION"}}
+		_, chunkType := applyTypeFilters("", "DECISION", tf)
+		if chunkType != "DECISION" {
+			t.Errorf("chunkType = %q, want DECISION", chunkType)
+		}
+	})
+}
+
+func TestExcludeQueryKeyPrefixesClause(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty prefixes returns empty clause", func(t *testing.T) {
+		t.Parallel()
+		clause := excludeQueryKeyPrefixesClause(nil)
+		if clause != "" {
+			t.Errorf("clause = %q, want empty", clause)
+		}
+	})
+
+	t.Run("single prefix", func(t *testing.T) {
+		t.Parallel()
+		clause := excludeQueryKeyPrefixesClause([]string{"admin-"})
+		want := ` AND cc.query_key NOT LIKE 'admin-%'`
+		if clause != want {
+			t.Errorf("clause = %q, want %q", clause, want)
+		}
+	})
+
+	t.Run("multiple prefixes", func(t *testing.T) {
+		t.Parallel()
+		clause := excludeQueryKeyPrefixesClause([]string{"admin-", "financial-"})
+		want := ` AND cc.query_key NOT LIKE 'admin-%' AND cc.query_key NOT LIKE 'financial-%'`
+		if clause != want {
+			t.Errorf("clause = %q, want %q", clause, want)
+		}
+	})
 }
 
