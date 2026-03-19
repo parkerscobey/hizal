@@ -215,19 +215,19 @@ var toolList = []toolSchema{
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"type":           map[string]interface{}{"type": "string", "description": "Chunk type slug (e.g. KNOWLEDGE, MEMORY, SPEC). Must be a valid type for the org."},
-				"query_key":      map[string]interface{}{"type": "string", "description": "Unique key for this context topic"},
-				"title":          map[string]interface{}{"type": "string", "description": "Short descriptive title"},
-				"content":        map[string]interface{}{"type": "string", "description": "Full context content"},
-				"project_id":     map[string]interface{}{"type": "string", "description": "Project UUID — required for PROJECT scope"},
-				"agent_id":       map[string]interface{}{"type": "string", "description": "Agent UUID — required for AGENT scope"},
-				"org_id":         map[string]interface{}{"type": "string", "description": "Org UUID — required for ORG scope"},
-				"always_inject":  map[string]interface{}{"type": "boolean", "description": "Override default_always_inject from chunk_types table"},
-				"scope":          map[string]interface{}{"type": "string", "description": "Override default_scope from chunk_types table (PROJECT | AGENT | ORG)"},
-				"source_file":    map[string]interface{}{"type": "string", "description": "Source file path"},
-				"source_lines":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
-				"gotchas":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
-				"related":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+				"type":          map[string]interface{}{"type": "string", "description": "Chunk type slug (e.g. KNOWLEDGE, MEMORY, SPEC). Must be a valid type for the org."},
+				"query_key":     map[string]interface{}{"type": "string", "description": "Unique key for this context topic"},
+				"title":         map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":       map[string]interface{}{"type": "string", "description": "Full context content"},
+				"project_id":    map[string]interface{}{"type": "string", "description": "Project UUID — required for PROJECT scope"},
+				"agent_id":      map[string]interface{}{"type": "string", "description": "Agent UUID — required for AGENT scope"},
+				"org_id":        map[string]interface{}{"type": "string", "description": "Org UUID — required for ORG scope"},
+				"always_inject": map[string]interface{}{"type": "boolean", "description": "Override default_always_inject from chunk_types table"},
+				"scope":         map[string]interface{}{"type": "string", "description": "Override default_scope from chunk_types table (PROJECT | AGENT | ORG)"},
+				"source_file":   map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
 			},
 			"required": []string{"type", "query_key", "title", "content"},
 		},
@@ -253,13 +253,15 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "read_context",
-		Description: "Fetch a context chunk by ID including version history. Scope-aware: works for PROJECT, AGENT, and ORG chunks.",
+		Description: "Fetch a context chunk by ID or query_key including version history. If both are provided, id wins. Scope-aware: works for PROJECT, AGENT, and ORG chunks.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"id": map[string]interface{}{"type": "string", "description": "Chunk UUID"},
+				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID — required when reading by query_key"},
+				"id":         map[string]interface{}{"type": "string", "description": "Chunk UUID"},
+				"query_key":  map[string]interface{}{"type": "string", "description": "Unique key for this context topic"},
 			},
-			"required": []string{"id"},
+			"required": []string{},
 		},
 	},
 	{
@@ -396,8 +398,8 @@ var toolList = []toolSchema{
 	},
 	// Orchestrator tools (WNW-74): only available to orchestrator-type agents
 	{
-		Name:        "create_project",
-		Description: "Creates a new Winnow project within the orchestrator's org.",
+		Name:         "create_project",
+		Description:  "Creates a new Winnow project within the orchestrator's org.",
 		AllowedTypes: []string{"orchestrator"},
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -410,8 +412,8 @@ var toolList = []toolSchema{
 		},
 	},
 	{
-		Name:        "list_agents",
-		Description: "Returns all agents in the org visible to the orchestrator.",
+		Name:         "list_agents",
+		Description:  "Returns all agents in the org visible to the orchestrator.",
 		AllowedTypes: []string{"orchestrator"},
 		InputSchema: map[string]interface{}{
 			"type":       "object",
@@ -420,8 +422,8 @@ var toolList = []toolSchema{
 		},
 	},
 	{
-		Name:        "add_agent_to_project",
-		Description: "Assigns an agent to a project so it can read/write project-scoped context chunks.",
+		Name:         "add_agent_to_project",
+		Description:  "Assigns an agent to a project so it can read/write project-scoped context chunks.",
 		AllowedTypes: []string{"orchestrator"},
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -433,8 +435,8 @@ var toolList = []toolSchema{
 		},
 	},
 	{
-		Name:        "remove_agent_from_project",
-		Description: "Removes an agent from a project when its work is done.",
+		Name:         "remove_agent_from_project",
+		Description:  "Removes an agent from a project when its work is done.",
 		AllowedTypes: []string{"orchestrator"},
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -609,10 +611,10 @@ type CreateProjectInput struct {
 }
 
 type CreateProjectResult struct {
-	ProjectID   string    `json:"project_id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	CreatedAt   time.Time `json:"created_at"`
+	ProjectID string    `json:"project_id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type ListAgentsResult struct {
@@ -620,13 +622,13 @@ type ListAgentsResult struct {
 }
 
 type AgentInfo struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Slug          string    `json:"slug"`
-	TypeID        *string   `json:"type_id,omitempty"`
-	TypeSlug      *string   `json:"type_slug,omitempty"`
-	MemoryEnabled bool      `json:"memory_enabled"`
-	Projects      []string  `json:"projects"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Slug          string   `json:"slug"`
+	TypeID        *string  `json:"type_id,omitempty"`
+	TypeSlug      *string  `json:"type_slug,omitempty"`
+	MemoryEnabled bool     `json:"memory_enabled"`
+	Projects      []string `json:"projects"`
 }
 
 type AddAgentToProjectInput struct {
@@ -769,7 +771,7 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.ReadContext(ctx, projectID, in.ID)
+		return s.tools.ReadContext(ctx, projectID, in)
 
 	case "update_context":
 		var in UpdateContextInput

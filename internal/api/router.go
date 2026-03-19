@@ -248,6 +248,18 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	r.Route("/v1/context", func(r chi.Router) {
 		r.Use(ContextAuth(pool))
 
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			if h == nil {
+				writeError(w, http.StatusServiceUnavailable, "DB_UNAVAILABLE", "database not connected")
+				return
+			}
+			if tracker != nil {
+				if claims, ok := ClaimsFrom(r.Context()); ok {
+					tracker.Track(claims.OrgID, claims.ProjectID, usage.OpRead)
+				}
+			}
+			h.ReadContext(w, r)
+		})
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 			if h == nil {
 				writeError(w, http.StatusServiceUnavailable, "DB_UNAVAILABLE", "database not connected")

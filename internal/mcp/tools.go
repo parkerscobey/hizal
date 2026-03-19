@@ -31,70 +31,70 @@ const (
 // ---- Input types for purpose-built write tools ----
 
 type WriteIdentityInput struct {
-	AgentID      string `json:"agent_id"`
-	QueryKey     string `json:"query_key"`
-	Title        string `json:"title"`
-	Content      string `json:"content"`
-	SourceFile   string `json:"source_file,omitempty"`
-	SourceLines  [2]int `json:"source_lines,omitempty"`
-	Gotchas      []string `json:"gotchas,omitempty"`
-	Related      []string `json:"related,omitempty"`
+	AgentID     string   `json:"agent_id"`
+	QueryKey    string   `json:"query_key"`
+	Title       string   `json:"title"`
+	Content     string   `json:"content"`
+	SourceFile  string   `json:"source_file,omitempty"`
+	SourceLines [2]int   `json:"source_lines,omitempty"`
+	Gotchas     []string `json:"gotchas,omitempty"`
+	Related     []string `json:"related,omitempty"`
 }
 
 type WriteMemoryInput struct {
-	AgentID      string   `json:"agent_id"`
-	QueryKey     string   `json:"query_key"`
-	Title        string   `json:"title"`
-	Content      string   `json:"content"`
-	SourceFile   string   `json:"source_file,omitempty"`
-	SourceLines  [2]int   `json:"source_lines,omitempty"`
-	Gotchas      []string `json:"gotchas,omitempty"`
-	Related      []string `json:"related,omitempty"`
+	AgentID     string   `json:"agent_id"`
+	QueryKey    string   `json:"query_key"`
+	Title       string   `json:"title"`
+	Content     string   `json:"content"`
+	SourceFile  string   `json:"source_file,omitempty"`
+	SourceLines [2]int   `json:"source_lines,omitempty"`
+	Gotchas     []string `json:"gotchas,omitempty"`
+	Related     []string `json:"related,omitempty"`
 }
 
 type WriteKnowledgeInput struct {
-	ProjectID    string   `json:"project_id"`
-	QueryKey     string   `json:"query_key"`
-	Title        string   `json:"title"`
-	Content      string   `json:"content"`
-	SourceFile   string   `json:"source_file,omitempty"`
-	SourceLines  [2]int   `json:"source_lines,omitempty"`
-	Gotchas      []string `json:"gotchas,omitempty"`
-	Related      []string `json:"related,omitempty"`
+	ProjectID   string   `json:"project_id"`
+	QueryKey    string   `json:"query_key"`
+	Title       string   `json:"title"`
+	Content     string   `json:"content"`
+	SourceFile  string   `json:"source_file,omitempty"`
+	SourceLines [2]int   `json:"source_lines,omitempty"`
+	Gotchas     []string `json:"gotchas,omitempty"`
+	Related     []string `json:"related,omitempty"`
 }
 
 type WriteConventionInput struct {
-	ProjectID    string   `json:"project_id"`
-	QueryKey     string   `json:"query_key"`
-	Title        string   `json:"title"`
-	Content      string   `json:"content"`
-	SourceFile   string   `json:"source_file,omitempty"`
-	SourceLines  [2]int   `json:"source_lines,omitempty"`
-	Gotchas      []string `json:"gotchas,omitempty"`
-	Related      []string `json:"related,omitempty"`
+	ProjectID   string   `json:"project_id"`
+	QueryKey    string   `json:"query_key"`
+	Title       string   `json:"title"`
+	Content     string   `json:"content"`
+	SourceFile  string   `json:"source_file,omitempty"`
+	SourceLines [2]int   `json:"source_lines,omitempty"`
+	Gotchas     []string `json:"gotchas,omitempty"`
+	Related     []string `json:"related,omitempty"`
 }
 
 type WriteOrgKnowledgeInput struct {
-	OrgID        string   `json:"org_id"`
-	QueryKey     string   `json:"query_key"`
-	Title        string   `json:"title"`
-	Content      string   `json:"content"`
-	SourceFile   string   `json:"source_file,omitempty"`
-	SourceLines  [2]int   `json:"source_lines,omitempty"`
-	Gotchas      []string `json:"gotchas,omitempty"`
-	Related      []string `json:"related,omitempty"`
+	OrgID       string   `json:"org_id"`
+	QueryKey    string   `json:"query_key"`
+	Title       string   `json:"title"`
+	Content     string   `json:"content"`
+	SourceFile  string   `json:"source_file,omitempty"`
+	SourceLines [2]int   `json:"source_lines,omitempty"`
+	Gotchas     []string `json:"gotchas,omitempty"`
+	Related     []string `json:"related,omitempty"`
 }
 
 type StorePrincipleInput struct {
-	OrgID              string   `json:"org_id"`
-	QueryKey           string   `json:"query_key"`
-	Title              string   `json:"title"`
-	Content            string   `json:"content"`
-	PromotedByUserID   string   `json:"promoted_by_user_id"`
-	SourceFile         string   `json:"source_file,omitempty"`
-	SourceLines        [2]int   `json:"source_lines,omitempty"`
-	Gotchas            []string `json:"gotchas,omitempty"`
-	Related            []string `json:"related,omitempty"`
+	OrgID            string   `json:"org_id"`
+	QueryKey         string   `json:"query_key"`
+	Title            string   `json:"title"`
+	Content          string   `json:"content"`
+	PromotedByUserID string   `json:"promoted_by_user_id"`
+	SourceFile       string   `json:"source_file,omitempty"`
+	SourceLines      [2]int   `json:"source_lines,omitempty"`
+	Gotchas          []string `json:"gotchas,omitempty"`
+	Related          []string `json:"related,omitempty"`
 }
 
 type WriteChunkInput struct {
@@ -142,17 +142,17 @@ func NewTools(pool *pgxpool.Pool, embed *embeddings.Client) *Tools {
 // ---- Input/Output types ----
 
 type WriteContextInput struct {
-	ProjectID   string   `json:"project_id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
 	// Scope is PROJECT | AGENT | ORG. Defaults to PROJECT.
 	// Prefer purpose-built tools (write_knowledge, write_memory, etc.) over
 	// setting scope manually — they route correctly and enforce guardrails.
-	Scope       string   `json:"scope,omitempty"`
+	Scope string `json:"scope,omitempty"`
 	// AgentID is required when Scope is AGENT.
-	AgentID     string   `json:"agent_id,omitempty"`
+	AgentID string `json:"agent_id,omitempty"`
 	// OrgID is required when Scope is ORG.
-	OrgID       string   `json:"org_id,omitempty"`
+	OrgID string `json:"org_id,omitempty"`
 	// AlwaysInject: true = ambient baseline, false = on-demand. Defaults to false.
-	AlwaysInject bool   `json:"always_inject,omitempty"`
+	AlwaysInject bool `json:"always_inject,omitempty"`
 	// ChunkType: IDENTITY | MEMORY | KNOWLEDGE | CONVENTION | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON. Defaults to KNOWLEDGE. Must be a valid type for the org (global or org-specific).
 	ChunkType   string   `json:"chunk_type,omitempty"`
 	QueryKey    string   `json:"query_key"`
@@ -165,22 +165,22 @@ type WriteContextInput struct {
 }
 
 type WriteContextResult struct {
-	ID            string    `json:"id"`
-	Scope         string    `json:"scope"`
-	AlwaysInject  bool      `json:"always_inject"`
-	ChunkType     string    `json:"chunk_type"`
-	QueryKey      string    `json:"query_key"`
-	Title         string    `json:"title"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Scope        string    `json:"scope"`
+	AlwaysInject bool      `json:"always_inject"`
+	ChunkType    string    `json:"chunk_type"`
+	QueryKey     string    `json:"query_key"`
+	Title        string    `json:"title"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type SearchContextInput struct {
 	ProjectID string `json:"project_id,omitempty"`
 	// Scope filters results to a specific scope. If empty, searches all accessible scopes.
 	// Values: PROJECT | AGENT | ORG
-	Scope    string `json:"scope,omitempty"`
+	Scope string `json:"scope,omitempty"`
 	// AgentID filters results to a specific agent (for AGENT-scoped chunks).
-	AgentID  string `json:"agent_id,omitempty"`
+	AgentID string `json:"agent_id,omitempty"`
 	// OrgID filters results to org-scoped chunks. If empty, derived from API key.
 	OrgID    string `json:"org_id,omitempty"`
 	Query    string `json:"query"`
@@ -198,7 +198,7 @@ type SearchContextInput struct {
 type StaleSignal struct {
 	// Action is the review action: "needs_update", "outdated", "incorrect", etc.
 	// Set to "low_score" when a score-based signal fires without an explicit action.
-	Action    string    `json:"action"`
+	Action string `json:"action"`
 	// Note is the most relevant reviewer note (correctness_note preferred, then usefulness_note).
 	Note      string    `json:"note,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -232,7 +232,8 @@ type SearchContextResult struct {
 
 type ReadContextInput struct {
 	ProjectID string `json:"project_id,omitempty"`
-	ID        string `json:"id"`
+	ID        string `json:"id,omitempty"`
+	QueryKey  string `json:"query_key,omitempty"`
 }
 
 type VersionResult struct {
@@ -636,21 +637,32 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	return &SearchContextResult{Results: results}, nil
 }
 
-func (t *Tools) ReadContext(ctx context.Context, projectID, id string) (*ReadContextResult, error) {
-	if id == "" {
-		return nil, fmt.Errorf("id is required")
+func (t *Tools) ReadContext(ctx context.Context, projectID string, in ReadContextInput) (*ReadContextResult, error) {
+	if in.ID == "" && in.QueryKey == "" {
+		return nil, fmt.Errorf("id or query_key is required")
 	}
-	// Scope-aware read: look up by chunk ID only. project_id is optional context
-	// for backward compatibility but NOT used as an access gate — chunk ID is globally unique.
-	row := pool(t).QueryRow(ctx, `
-		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
-		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
+
+	query := `
+		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.always_inject, cc.chunk_type,
+		       cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file, cc.source_lines,
+		       cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
 		FROM context_chunks cc
-		WHERE cc.id = $1
-	`, id)
+	`
 
-	chunk, currentVersion, err := scanChunkRow(row)
+	var row pgxScanner
+	if in.ID != "" {
+		// Scope-aware read: look up by chunk ID only. project_id is optional context
+		// for backward compatibility but NOT used as an access gate — chunk ID is globally unique.
+		row = pool(t).QueryRow(ctx, query+`WHERE cc.id = $1`, in.ID)
+	} else {
+		if projectID == "" {
+			return nil, fmt.Errorf("project_id is required when reading by query_key")
+		}
+		row = pool(t).QueryRow(ctx, query+`WHERE cc.query_key = $1 AND cc.project_id = $2 LIMIT 1`, in.QueryKey, projectID)
+	}
+
+	chunk, currentVersion, err := scanChunkReadRow(row)
 	if err != nil {
 		return nil, fmt.Errorf("chunk not found: %w", err)
 	}
@@ -675,7 +687,7 @@ func (t *Tools) ReadContext(ctx context.Context, projectID, id string) (*ReadCon
 	}
 
 	return &ReadContextResult{
-		ChunkResult: chunkResultFromModel(chunk, currentVersion, 0),
+		ChunkResult: readContextResultFromModel(chunk, currentVersion),
 		Versions:    versions,
 	}, nil
 }
@@ -1680,6 +1692,33 @@ func scanChunkRow(row pgxScanner) (models.ContextChunk, int, error) {
 	return chunk, version, err
 }
 
+func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
+	var chunk models.ContextChunk
+	var version int
+	err := row.Scan(
+		&chunk.ID,
+		&chunk.ProjectID,
+		&chunk.Scope,
+		&chunk.AgentID,
+		&chunk.OrgID,
+		&chunk.AlwaysInject,
+		&chunk.ChunkType,
+		&chunk.QueryKey,
+		&chunk.Title,
+		&chunk.Content,
+		&chunk.Embedding,
+		&chunk.SourceFile,
+		&chunk.SourceLines,
+		&chunk.Gotchas,
+		&chunk.Related,
+		&chunk.CreatedByAgent,
+		&chunk.CreatedAt,
+		&chunk.UpdatedAt,
+		&version,
+	)
+	return chunk, version, err
+}
+
 func scanChunkResultRow(row pgxScanner) (models.ContextChunk, int, float64, error) {
 	var chunk models.ContextChunk
 	var version int
@@ -1752,4 +1791,14 @@ func chunkResultFromModel(chunk models.ContextChunk, version int, score float64)
 		CreatedAt:   chunk.CreatedAt,
 		UpdatedAt:   chunk.UpdatedAt,
 	}
+}
+
+func readContextResultFromModel(chunk models.ContextChunk, version int) ChunkResult {
+	result := chunkResultFromModel(chunk, version, 0)
+	result.Scope = chunk.Scope
+	result.AgentID = chunk.AgentID
+	result.OrgID = chunk.OrgID
+	result.AlwaysInject = chunk.AlwaysInject
+	result.ChunkType = chunk.ChunkType
+	return result
 }

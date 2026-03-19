@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/XferOps/winnow/internal/models"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 )
 
@@ -108,8 +111,8 @@ func TestScanChunkSearchRow(t *testing.T) {
 		&createdByAgent,
 		createdAt,
 		updatedAt,
-		2,      // version
-		0.88,   // cosine score
+		2,    // version
+		0.88, // cosine score
 		lastReviewAt,
 	}}
 
@@ -415,9 +418,9 @@ func TestStorePrincipleGuardrail(t *testing.T) {
 	tools := &Tools{pool: nil, embed: nil}
 
 	in := StorePrincipleInput{
-		QueryKey:   "principle-1",
-		Title:      "Test Principle",
-		Content:    "This is a test principle",
+		QueryKey:         "principle-1",
+		Title:            "Test Principle",
+		Content:          "This is a test principle",
 		PromotedByUserID: "", // Missing!
 	}
 
@@ -459,8 +462,8 @@ func TestMergeSearchFilters(t *testing.T) {
 			IncludeChunkTypes: []string{"KNOWLEDGE", "DECISION"},
 		}
 		overrides := models.AgentTypeFilterConfig{
-			IncludeScopes:     []string{"AGENT"},
-			ExcludeScopes:     []string{"PROJECT"},
+			IncludeScopes:                  []string{"AGENT"},
+			ExcludeScopes:                  []string{"PROJECT"},
 			OrgSearchRequiresExplicitScope: true,
 		}
 		result := mergeSearchFilters(typeFilters, overrides)
@@ -479,7 +482,7 @@ func TestMergeSearchFilters(t *testing.T) {
 		t.Parallel()
 		typeFilters := models.AgentTypeFilterConfig{}
 		overrides := models.AgentTypeFilterConfig{
-			IncludeScopes:     []string{"ORG"},
+			IncludeScopes:           []string{"ORG"},
 			ExcludeQueryKeyPrefixes: []string{"admin-", "financial-"},
 		}
 		result := mergeSearchFilters(typeFilters, overrides)
@@ -529,7 +532,7 @@ func TestApplyTypeFilters(t *testing.T) {
 	t.Run("org_search_requires_explicit_scope removes ORG when not explicit", func(t *testing.T) {
 		t.Parallel()
 		tf := models.AgentTypeFilterConfig{
-			IncludeScopes: []string{"PROJECT", "ORG"},
+			IncludeScopes:                  []string{"PROJECT", "ORG"},
 			OrgSearchRequiresExplicitScope: true,
 		}
 		scope, _ := applyTypeFilters("PROJECT", "", tf)
@@ -640,6 +643,130 @@ func TestWriteChunk_Validation(t *testing.T) {
 	})
 }
 
+func TestReadContextValidation(t *testing.T) {
+	t.Parallel()
+
+	tools := &Tools{pool: nil, embed: nil}
+
+	t.Run("missing id and query_key returns error", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := tools.ReadContext(context.Background(), "", ReadContextInput{})
+		if err == nil {
+			t.Fatalf("expected error for missing identifiers, got nil")
+		}
+		if !strings.Contains(err.Error(), "id or query_key is required") {
+			t.Fatalf("error = %q, want to contain %q", err.Error(), "id or query_key is required")
+		}
+	})
+
+	t.Run("query_key without project_id returns error", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := tools.ReadContext(context.Background(), "", ReadContextInput{QueryKey: "spec-key"})
+		if err == nil {
+			t.Fatalf("expected error for missing project_id, got nil")
+		}
+		if !strings.Contains(err.Error(), "project_id is required") {
+			t.Fatalf("error = %q, want to contain %q", err.Error(), "project_id is required")
+		}
+	})
+}
+
+func TestReadContextByQueryKey(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New() error = %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	tools := &Tools{pool: pool, embed: nil}
+
+	orgID := uuid.NewString()
+	projectID := uuid.NewString()
+	projectSlug := "read-context-project-" + strings.ToLower(uuid.NewString())
+	chunkID := uuid.NewString()
+	queryKey := "read-context-spec-" + strings.ToLower(uuid.NewString())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM projects WHERE id = $1`, projectID)
+		_, _ = pool.Exec(ctx, `DELETE FROM orgs WHERE id = $1`, orgID)
+	})
+
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug) VALUES ($1, $2, $3)`, orgID, "Read Context Test Org", "read-context-org-"+strings.ToLower(uuid.NewString())); err != nil {
+		t.Fatalf("insert org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO projects (id, org_id, name, slug) VALUES ($1, $2, $3, $4)`, projectID, orgID, "Read Context Test Project", projectSlug); err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+	currentContent := string(encodeContent("Current content"))
+	previousContent := string(encodeContent("Previous content"))
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO context_chunks (id, project_id, scope, always_inject, chunk_type, query_key, title, content, source_lines, gotchas, related)
+		VALUES ($1, $2, 'PROJECT', true, 'SPEC', $3, $4, $5::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb)
+	`, chunkID, projectID, queryKey, "WNW-80 Spec", currentContent); err != nil {
+		t.Fatalf("insert chunk: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2::jsonb, $3)
+	`, chunkID, previousContent, "Initial draft"); err != nil {
+		t.Fatalf("insert context version: %v", err)
+	}
+
+	t.Run("reads by query_key and project_id", func(t *testing.T) {
+		result, err := tools.ReadContext(ctx, projectID, ReadContextInput{QueryKey: queryKey})
+		if err != nil {
+			t.Fatalf("ReadContext() error = %v", err)
+		}
+		if result.ID != chunkID {
+			t.Fatalf("id = %q, want %q", result.ID, chunkID)
+		}
+		if result.QueryKey != queryKey {
+			t.Fatalf("query_key = %q, want %q", result.QueryKey, queryKey)
+		}
+		if result.Scope != "PROJECT" {
+			t.Fatalf("scope = %q, want PROJECT", result.Scope)
+		}
+		if !result.AlwaysInject {
+			t.Fatalf("always_inject = false, want true")
+		}
+		if result.ChunkType != "SPEC" {
+			t.Fatalf("chunk_type = %q, want SPEC", result.ChunkType)
+		}
+		if len(result.Versions) != 1 {
+			t.Fatalf("versions length = %d, want 1", len(result.Versions))
+		}
+		if result.Versions[0].ChangeNote != "Initial draft" {
+			t.Fatalf("change_note = %q, want %q", result.Versions[0].ChangeNote, "Initial draft")
+		}
+	})
+
+	t.Run("id wins when id and query_key are both provided", func(t *testing.T) {
+		result, err := tools.ReadContext(ctx, projectID, ReadContextInput{ID: chunkID, QueryKey: "wrong-key"})
+		if err != nil {
+			t.Fatalf("ReadContext() error = %v", err)
+		}
+		if result.ID != chunkID {
+			t.Fatalf("id = %q, want %q", result.ID, chunkID)
+		}
+		if result.QueryKey != queryKey {
+			t.Fatalf("query_key = %q, want %q", result.QueryKey, queryKey)
+		}
+	})
+}
+
 func TestWriteChunk_AlwaysInjectOverride(t *testing.T) {
 	t.Parallel()
 
@@ -715,4 +842,3 @@ func TestExcludeQueryKeyPrefixesClause(t *testing.T) {
 		}
 	})
 }
-
