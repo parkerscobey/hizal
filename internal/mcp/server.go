@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/XferOps/winnow/internal/auth"
 	"github.com/XferOps/winnow/internal/embeddings"
@@ -370,6 +371,57 @@ var toolList = []toolSchema{
 			"required": []string{"session_id"},
 		},
 	},
+	// Orchestrator tools (WNW-74): only available to orchestrator-type agents
+	{
+		Name:        "create_project",
+		Description: "Creates a new Winnow project within the orchestrator's org.",
+		AllowedTypes: []string{"orchestrator"},
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"name":        map[string]interface{}{"type": "string", "description": "Project name"},
+				"slug":        map[string]interface{}{"type": "string", "description": "Optional project slug (auto-generated if omitted)"},
+				"description": map[string]interface{}{"type": "string", "description": "Optional project description"},
+			},
+			"required": []string{"name"},
+		},
+	},
+	{
+		Name:        "list_agents",
+		Description: "Returns all agents in the org visible to the orchestrator.",
+		AllowedTypes: []string{"orchestrator"},
+		InputSchema: map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+			"required":   []string{},
+		},
+	},
+	{
+		Name:        "add_agent_to_project",
+		Description: "Assigns an agent to a project so it can read/write project-scoped context chunks.",
+		AllowedTypes: []string{"orchestrator"},
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"agent_id":   map[string]interface{}{"type": "string", "description": "Agent UUID to assign"},
+				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID to assign agent to"},
+			},
+			"required": []string{"agent_id", "project_id"},
+		},
+	},
+	{
+		Name:        "remove_agent_from_project",
+		Description: "Removes an agent from a project when its work is done.",
+		AllowedTypes: []string{"orchestrator"},
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"agent_id":   map[string]interface{}{"type": "string", "description": "Agent UUID to remove"},
+				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID to remove agent from"},
+			},
+			"required": []string{"agent_id", "project_id"},
+		},
+	},
 }
 
 // ServeHTTP handles MCP JSON-RPC 2.0 requests.
@@ -523,6 +575,57 @@ type serverProject struct {
 
 type listProjectsResult struct {
 	Projects []serverProject `json:"projects"`
+}
+
+// ---- Orchestrator tool types (WNW-74) ----
+
+type CreateProjectInput struct {
+	Name        string  `json:"name"`
+	Slug        *string `json:"slug,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
+type CreateProjectResult struct {
+	ProjectID   string    `json:"project_id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type ListAgentsResult struct {
+	Agents []AgentInfo `json:"agents"`
+}
+
+type AgentInfo struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Slug          string    `json:"slug"`
+	TypeID        *string   `json:"type_id,omitempty"`
+	TypeSlug      *string   `json:"type_slug,omitempty"`
+	MemoryEnabled bool      `json:"memory_enabled"`
+	Projects      []string  `json:"projects"`
+}
+
+type AddAgentToProjectInput struct {
+	AgentID   string `json:"agent_id"`
+	ProjectID string `json:"project_id"`
+}
+
+type AddAgentToProjectResult struct {
+	AgentID   string `json:"agent_id"`
+	ProjectID string `json:"project_id"`
+	Confirmed bool   `json:"confirmed"`
+}
+
+type RemoveAgentFromProjectInput struct {
+	AgentID   string `json:"agent_id"`
+	ProjectID string `json:"project_id"`
+}
+
+type RemoveAgentFromProjectResult struct {
+	AgentID   string `json:"agent_id"`
+	ProjectID string `json:"project_id"`
+	Confirmed bool   `json:"confirmed"`
 }
 
 type apiKeyScope struct {
@@ -752,6 +855,51 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		}
 		return s.tools.EndSession(ctx, scope.OrgID, in)
 
+	// Orchestrator tools (WNW-74)
+	case "create_project":
+		if err := s.requireOrchestrator(ctx, r); err != nil {
+			return nil, err
+		}
+		var in CreateProjectInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.createProject(ctx, scope.OrgID, in)
+
+	case "list_agents":
+		if err := s.requireOrchestrator(ctx, r); err != nil {
+			return nil, err
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.listAgents(ctx, scope.OrgID)
+
+	case "add_agent_to_project":
+		if err := s.requireOrchestrator(ctx, r); err != nil {
+			return nil, err
+		}
+		var in AddAgentToProjectInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		return s.addAgentToProject(ctx, in)
+
+	case "remove_agent_from_project":
+		if err := s.requireOrchestrator(ctx, r); err != nil {
+			return nil, err
+		}
+		var in RemoveAgentFromProjectInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		return s.removeAgentFromProject(ctx, in)
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
@@ -792,6 +940,125 @@ func (s *Server) listProjects(ctx context.Context, r *http.Request) (*listProjec
 		return nil, err
 	}
 	return &listProjectsResult{Projects: projects}, nil
+}
+
+// ---- Orchestrator tool implementations (WNW-74) ----
+
+// requireOrchestrator checks that the calling agent has type 'orchestrator'.
+func (s *Server) requireOrchestrator(ctx context.Context, r *http.Request) error {
+	agentTypeSlug, err := s.resolveAgentType(ctx, r)
+	if err != nil {
+		return err
+	}
+	if agentTypeSlug != "orchestrator" {
+		return fmt.Errorf("this tool is only available to orchestrator-type agents")
+	}
+	return nil
+}
+
+// createProject creates a new Winnow project within the orchestrator's org.
+func (s *Server) createProject(ctx context.Context, orgID string, in CreateProjectInput) (*CreateProjectResult, error) {
+	if in.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	slug := in.Name
+	if in.Slug != nil && *in.Slug != "" {
+		slug = *in.Slug
+	}
+
+	var result CreateProjectResult
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO projects (org_id, name, slug, description)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, name, slug, created_at
+	`, orgID, in.Name, slug, in.Description).Scan(&result.ProjectID, &result.Name, &result.Slug, &result.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create project: %w", err)
+	}
+
+	return &result, nil
+}
+
+// listAgents returns all agents in the org visible to the orchestrator.
+func (s *Server) listAgents(ctx context.Context, orgID string) (*ListAgentsResult, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.name, a.slug, a.type_id, at.slug as type_slug, a.memory_enabled,
+		       COALESCE(array_agg(ap.project_id) FILTER (WHERE ap.project_id IS NOT NULL), '{}'::uuid[]) as projects
+		FROM agents a
+		LEFT JOIN agent_types at ON at.id = a.type_id
+		LEFT JOIN agent_projects ap ON ap.agent_id = a.id
+		WHERE a.org_id = $1
+		GROUP BY a.id, a.name, a.slug, a.type_id, at.slug, a.memory_enabled
+		ORDER BY a.created_at ASC
+	`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("list agents: %w", err)
+	}
+	defer rows.Close()
+
+	var agents []AgentInfo
+	for rows.Next() {
+		var a AgentInfo
+		if err := rows.Scan(&a.ID, &a.Name, &a.Slug, &a.TypeID, &a.TypeSlug, &a.MemoryEnabled, &a.Projects); err != nil {
+			return nil, err
+		}
+		agents = append(agents, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &ListAgentsResult{Agents: agents}, nil
+}
+
+// addAgentToProject assigns an agent to a project so it can read/write project-scoped context chunks.
+func (s *Server) addAgentToProject(ctx context.Context, in AddAgentToProjectInput) (*AddAgentToProjectResult, error) {
+	if in.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+	if in.ProjectID == "" {
+		return nil, fmt.Errorf("project_id is required")
+	}
+
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO agent_projects (agent_id, project_id)
+		VALUES ($1, $2)
+		ON CONFLICT (agent_id, project_id) DO NOTHING
+	`, in.AgentID, in.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("add agent to project: %w", err)
+	}
+
+	return &AddAgentToProjectResult{
+		AgentID:   in.AgentID,
+		ProjectID: in.ProjectID,
+		Confirmed: true,
+	}, nil
+}
+
+// removeAgentFromProject removes an agent from a project when its work is done.
+func (s *Server) removeAgentFromProject(ctx context.Context, in RemoveAgentFromProjectInput) (*RemoveAgentFromProjectResult, error) {
+	if in.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+	if in.ProjectID == "" {
+		return nil, fmt.Errorf("project_id is required")
+	}
+
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM agent_projects
+		WHERE agent_id = $1 AND project_id = $2
+	`, in.AgentID, in.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("remove agent from project: %w", err)
+	}
+
+	return &RemoveAgentFromProjectResult{
+		AgentID:   in.AgentID,
+		ProjectID: in.ProjectID,
+		Confirmed: true,
+	}, nil
 }
 
 func (s *Server) loadAPIKeyScope(ctx context.Context, r *http.Request) (*apiKeyScope, error) {
