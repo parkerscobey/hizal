@@ -138,3 +138,32 @@ func TestFilterToolList(t *testing.T) {
 		}
 	})
 }
+
+func TestReadContextToolSchemaSupportsQueryKey(t *testing.T) {
+	var readContext toolSchema
+	for _, tool := range toolList {
+		if tool.Name == "read_context" {
+			readContext = tool
+			break
+		}
+	}
+	if readContext.Name == "" {
+		t.Fatal("read_context tool schema not found")
+	}
+
+	properties, ok := readContext.InputSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("read_context properties missing")
+	}
+	if _, ok := properties["query_key"]; !ok {
+		t.Fatal("read_context schema missing query_key")
+	}
+
+	required, ok := readContext.InputSchema["required"].([]string)
+	if !ok {
+		t.Fatal("read_context required field malformed")
+	}
+	if len(required) != 0 {
+		t.Fatalf("read_context required = %v, want no required fields", required)
+	}
+}

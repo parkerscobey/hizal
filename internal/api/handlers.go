@@ -110,10 +110,13 @@ func (h *Handlers) CompactContext(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// GET /v1/context/:id
+// GET /v1/context?query_key=<key>&project_id=<uuid> or /v1/context/:id
 func (h *Handlers) ReadContext(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	result, err := h.tools.ReadContext(r.Context(), projectID(r), id)
+	in := mcp.ReadContextInput{
+		ID:       chi.URLParam(r, "id"),
+		QueryKey: r.URL.Query().Get("query_key"),
+	}
+	result, err := h.tools.ReadContext(r.Context(), projectID(r), in)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
