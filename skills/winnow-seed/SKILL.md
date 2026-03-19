@@ -7,6 +7,10 @@ description: Seed a new or empty Winnow project with foundational context by sca
 
 Use this skill to populate a Winnow project with its initial knowledge base. This is the "day zero" workflow — turning an empty project into something agents can actually onboard from.
 
+## Session Lifecycle
+
+Start a session at the top of any seeding task — see `winnow-onboard`. End it with `end_session` when done.
+
 ## When To Use
 
 - A new Winnow project has been created but has no chunks
@@ -123,6 +127,29 @@ Summarize what was seeded:
 - **500-1500 words per chunk** is the sweet spot. Shorter chunks lack context; longer ones dilute search relevance.
 - **Multiple chunks per category is fine.** "Frontend Architecture" and "Frontend Pages Reference" can coexist under `frontend-patterns`.
 - **Prefer more focused chunks** over fewer monolithic ones. Agents search semantically — narrower chunks rank better for specific queries.
+
+## Writing Tool Guidance
+
+Use the right tool for the content you are writing:
+
+| Content type | Tool | Scope | always_inject |
+|---|---|---|---|
+| Factual project documentation | `write_knowledge` | PROJECT | false |
+| Foundational rules every agent must know | `write_convention` | PROJECT | true |
+| Raw exploratory notes (reviewed at end_session) | `write_chunk(type="RESEARCH")` | PROJECT | false |
+| Key architectural decisions | `write_chunk(type="DECISION")` | PROJECT | false |
+
+Do NOT use `write_memory` or `write_identity` during seeding — seeding is project-level, not agent-level.
+
+## Always-Inject Guardrails
+
+`write_convention` is the only always_inject tool used during seeding. Apply the three-question test:
+
+1. Will this still be true and relevant in 6 months?
+2. Does every agent need to know this?
+3. Would NOT knowing this cause a meaningful mistake?
+
+If any answer is no, use `write_knowledge` or `write_chunk` instead. Overuse of always_inject degrades every agent's context window.
 
 ## Notes
 
