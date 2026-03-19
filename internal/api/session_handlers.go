@@ -214,17 +214,25 @@ func (h *SessionHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /v1/sessions/:id/memory-chunks
-// Returns MEMORY chunks written during this session (for consolidation review).
+// Deprecated: use /consolidation-chunks instead.
+// Returns chunks written during this session whose type has consolidation_behavior=SURFACE.
 func (h *SessionHandlers) GetSessionMemoryChunks(w http.ResponseWriter, r *http.Request) {
+	h.GetSessionConsolidationChunks(w, r)
+}
+
+// GET /v1/sessions/:id/consolidation-chunks
+// Returns chunks written during this session whose type has consolidation_behavior=SURFACE (for consolidation review).
+func (h *SessionHandlers) GetSessionConsolidationChunks(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	orgID := resolveOrgID(r)
 
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT cc.id, cc.query_key, cc.title, cc.scope, cc.chunk_type, cc.always_inject, cc.created_at
 		FROM context_chunks cc
+		JOIN chunk_types ct ON ct.slug = cc.chunk_type
 		WHERE cc.agent_id = (SELECT agent_id FROM sessions WHERE id = $1 AND org_id = $2)
-		  AND cc.chunk_type = 'MEMORY'
-		  AND cc.always_inject = FALSE
+		  AND (ct.org_id IS NULL OR ct.org_id = $2)
+		  AND ct.consolidation_behavior = 'SURFACE'
 		  AND cc.created_at >= (SELECT started_at FROM sessions WHERE id = $1 AND org_id = $2)
 		ORDER BY cc.created_at ASC
 	`, sessionID, orgID)

@@ -447,16 +447,18 @@ func (t *Tools) EndSession(ctx context.Context, orgID string, in EndSessionInput
 		return nil, fmt.Errorf("EndSession: %w", err)
 	}
 
-	// Return write_memory chunks written during this session for consolidation review.
-	// These are AGENT-scoped, always_inject=false (episodic) — the ones to classify.
+	// Return chunks written during this session whose type has consolidation_behavior=SURFACE.
 	rows, err := t.pool.Query(ctx, `
-		SELECT id, query_key, title, scope
-		FROM context_chunks
-		WHERE agent_id = (SELECT agent_id FROM sessions WHERE id = $1)
-		  AND chunk_type = 'MEMORY'
-		  AND always_inject = FALSE
-		  AND created_at >= (SELECT started_at FROM sessions WHERE id = $1)
-		ORDER BY created_at ASC
+		SELECT cc.id, cc.query_key, cc.title, cc.scope
+		FROM context_chunks cc
+		JOIN chunk_types ct ON ct.slug = cc.chunk_type
+		WHERE cc.agent_id = (SELECT agent_id FROM sessions WHERE id = $1)
+		  AND (ct.org_id IS NULL OR ct.org_id = (
+		      SELECT org_id FROM sessions WHERE id = $1
+		  ))
+		  AND ct.consolidation_behavior = 'SURFACE'
+		  AND cc.created_at >= (SELECT started_at FROM sessions WHERE id = $1)
+		ORDER BY cc.created_at ASC
 	`, sess.ID)
 	if err != nil {
 		return nil, fmt.Errorf("EndSession fetch chunks: %w", err)

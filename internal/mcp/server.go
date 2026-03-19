@@ -387,7 +387,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "end_session",
-		Description: "Close the session and return chunks written during it for KEEP / PROMOTE / DISCARD consolidation review.",
+		Description: "Close the session and return chunks written during it whose type is marked SURFACE for consolidation review (KEEP / PROMOTE / DISCARD).",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
