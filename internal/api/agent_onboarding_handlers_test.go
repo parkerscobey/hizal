@@ -117,7 +117,7 @@ func TestAgentOnboardingEndpointReturnsAgentProjects(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if !strings.Contains(body.GuideMarkdown, "Winnow Agent Onboarding Guide") {
+	if !strings.Contains(body.GuideMarkdown, "Hizal Agent Onboarding Guide") {
 		t.Fatalf("guide_markdown missing expected heading")
 	}
 
@@ -143,12 +143,12 @@ func TestAgentOnboardingEndpointReturnsAgentProjects(t *testing.T) {
 		t.Fatalf("len(skills) = %d, want 6", len(body.Skills))
 	}
 	expectedSkillURLs := map[string]string{
-		"winnow-compact":  "/api/v1/skills/winnow-compact",
-		"winnow-onboard":  "/api/v1/skills/winnow-onboard",
-		"winnow-plan":     "/api/v1/skills/winnow-plan",
-		"winnow-research": "/api/v1/skills/winnow-research",
-		"winnow-review":   "/api/v1/skills/winnow-review",
-		"winnow-seed":     "/api/v1/skills/winnow-seed",
+		"hizal-compact":  "/api/v1/skills/hizal-compact",
+		"hizal-onboard":  "/api/v1/skills/hizal-onboard",
+		"hizal-plan":     "/api/v1/skills/hizal-plan",
+		"hizal-research": "/api/v1/skills/hizal-research",
+		"hizal-review":   "/api/v1/skills/hizal-review",
+		"hizal-seed":     "/api/v1/skills/hizal-seed",
 	}
 	for _, skill := range body.Skills {
 		expectedURL, ok := expectedSkillURLs[skill.ID]
@@ -274,7 +274,7 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if !strings.Contains(body.GuideMarkdown, "Winnow Agent Onboarding Guide") {
+	if !strings.Contains(body.GuideMarkdown, "Hizal Agent Onboarding Guide") {
 		t.Fatalf("guide_markdown missing expected heading")
 	}
 	if body.Agent.ID == nil || *body.Agent.ID != agentID {
@@ -296,12 +296,12 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 		t.Fatalf("len(skills) = %d, want 6", len(body.Skills))
 	}
 	expectedAgentSkillURLs := map[string]string{
-		"winnow-compact":  "/api/v1/agents/" + agentID + "/skills/winnow-compact",
-		"winnow-onboard":  "/api/v1/agents/" + agentID + "/skills/winnow-onboard",
-		"winnow-plan":     "/api/v1/agents/" + agentID + "/skills/winnow-plan",
-		"winnow-research": "/api/v1/agents/" + agentID + "/skills/winnow-research",
-		"winnow-review":   "/api/v1/agents/" + agentID + "/skills/winnow-review",
-		"winnow-seed":     "/api/v1/agents/" + agentID + "/skills/winnow-seed",
+		"hizal-compact":  "/api/v1/agents/" + agentID + "/skills/hizal-compact",
+		"hizal-onboard":  "/api/v1/agents/" + agentID + "/skills/hizal-onboard",
+		"hizal-plan":     "/api/v1/agents/" + agentID + "/skills/hizal-plan",
+		"hizal-research": "/api/v1/agents/" + agentID + "/skills/hizal-research",
+		"hizal-review":   "/api/v1/agents/" + agentID + "/skills/hizal-review",
+		"hizal-seed":     "/api/v1/agents/" + agentID + "/skills/hizal-seed",
 	}
 	for _, skill := range body.Skills {
 		expectedURL, ok := expectedAgentSkillURLs[skill.ID]
@@ -322,9 +322,9 @@ func TestAgentOnboardingJWTEndpointReturnsAgentProjects(t *testing.T) {
 }
 
 func TestSkillEndpointReturnsMarkdown(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/winnow-onboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/hizal-onboard", nil)
 	routeCtx := chi.NewRouteContext()
-	routeCtx.URLParams.Add("id", "winnow-onboard")
+	routeCtx.URLParams.Add("id", "hizal-onboard")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
 
 	rr := httptest.NewRecorder()
@@ -342,13 +342,13 @@ func TestSkillEndpointReturnsMarkdown(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if body.ID != "winnow-onboard" {
-		t.Fatalf("id = %q, want winnow-onboard", body.ID)
+	if body.ID != "hizal-onboard" {
+		t.Fatalf("id = %q, want hizal-onboard", body.ID)
 	}
 	if body.Format != "markdown" {
 		t.Fatalf("format = %q, want markdown", body.Format)
 	}
-	if !strings.Contains(body.Markdown, "# Winnow Onboard") {
+	if !strings.Contains(body.Markdown, "# Hizal Onboard") {
 		t.Fatalf("markdown missing expected heading")
 	}
 }
@@ -381,12 +381,12 @@ func TestSkillsListEndpointReturnsCatalog(t *testing.T) {
 	}
 
 	expectedSkillURLs := map[string]string{
-		"winnow-compact":  "/api/v1/skills/winnow-compact",
-		"winnow-onboard":  "/api/v1/skills/winnow-onboard",
-		"winnow-plan":     "/api/v1/skills/winnow-plan",
-		"winnow-research": "/api/v1/skills/winnow-research",
-		"winnow-review":   "/api/v1/skills/winnow-review",
-		"winnow-seed":     "/api/v1/skills/winnow-seed",
+		"hizal-compact":  "/api/v1/skills/hizal-compact",
+		"hizal-onboard":  "/api/v1/skills/hizal-onboard",
+		"hizal-plan":     "/api/v1/skills/hizal-plan",
+		"hizal-research": "/api/v1/skills/hizal-research",
+		"hizal-review":   "/api/v1/skills/hizal-review",
+		"hizal-seed":     "/api/v1/skills/hizal-seed",
 	}
 	for _, skill := range body.Skills {
 		expectedURL, ok := expectedSkillURLs[skill.ID]
@@ -444,7 +444,7 @@ func TestSkillEndpointReachableViaJWT(t *testing.T) {
 		t.Fatalf("SignJWT() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/winnow-onboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/hizal-onboard", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	rr := httptest.NewRecorder()
@@ -460,8 +460,8 @@ func TestSkillEndpointReachableViaJWT(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if body.ID != "winnow-onboard" {
-		t.Fatalf("id = %q, want winnow-onboard", body.ID)
+	if body.ID != "hizal-onboard" {
+		t.Fatalf("id = %q, want hizal-onboard", body.ID)
 	}
 }
 
@@ -500,7 +500,7 @@ func TestSkillEndpointAliasReachableViaJWT(t *testing.T) {
 		t.Fatalf("SignJWT() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/skills/winnow-onboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/skills/hizal-onboard", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	rr := httptest.NewRecorder()
@@ -516,7 +516,7 @@ func TestSkillEndpointAliasReachableViaJWT(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if body.ID != "winnow-onboard" {
-		t.Fatalf("id = %q, want winnow-onboard", body.ID)
+	if body.ID != "hizal-onboard" {
+		t.Fatalf("id = %q, want hizal-onboard", body.ID)
 	}
 }

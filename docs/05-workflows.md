@@ -1,8 +1,8 @@
-# Winnow: Workflows
+# Hizal: Workflows
 
 ## Agent Memory Lifecycle
 
-This is the complete lifecycle for a Winnow-connected agent session:
+This is the complete lifecycle for a Hizal-connected agent session:
 
 ```
 Session start
@@ -22,17 +22,17 @@ During work
 
 Session end
   ├─ end_session: returns MEMORY chunks for review/promotion
-  ├─ winnow-compact: merge noisy/overlapping chunks
-  └─ winnow-review: rate chunks used heavily
+  ├─ hizal-compact: merge noisy/overlapping chunks
+  └─ hizal-review: rate chunks used heavily
 ```
 
 ---
 
-## Full Winnow Lifecycle
+## Full Hizal Lifecycle
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Winnow Lifecycle                              │
+│                    Hizal Lifecycle                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
@@ -44,7 +44,7 @@ Session end
 │   write_convention  write_knowledge (chunk_type=PLAN)           │
 │   (day zero)        write_memory                                │
 │                                                                 │
-│   winnow-seed       winnow-         winnow-                     │
+│   hizal-seed       hizal-         hizal-                     │
 │   (first use)       research         plan                       │
 │                                                                 │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
@@ -54,20 +54,20 @@ Session end
 │   compact_context  write_memory     review_context              │
 │   write_knowledge  write_knowledge                              │
 │                                                                 │
-│   winnow-compact   (write code)     winnow-review               │
+│   hizal-compact   (write code)     hizal-review               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## RPI Workflow with Winnow
+## RPI Workflow with Hizal
 
-Research → Plan → Implement, mapped to Winnow's purpose-built tools:
+Research → Plan → Implement, mapped to Hizal's purpose-built tools:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    RPI Workflow with Winnow                      │
+│                    RPI Workflow with Hizal                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
@@ -80,8 +80,8 @@ Research → Plan → Implement, mapped to Winnow's purpose-built tools:
 │   write_knowledge    PLAN)           write_knowledge            │
 │   write_memory                       compact_context            │
 │                                                                 │
-│   winnow-research   winnow-plan     winnow-compact              │
-│                                     winnow-review               │
+│   hizal-research   hizal-plan     hizal-compact              │
+│                                     hizal-review               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -210,13 +210,13 @@ Context Usage
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  winnow-compact     │
+                    │  hizal-compact     │
                     │  (if chunks written)│
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  winnow-review      │
+                    │  hizal-review      │
                     │  (rate used chunks) │
                     └──────────┬──────────┘
                                │
@@ -249,7 +249,7 @@ Context Usage
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  winnow-compact     │
+                    │  hizal-compact     │
                     │  (save for handoff) │
                     └──────────┬──────────┘
                                │
@@ -262,7 +262,7 @@ Context Usage
                     ┌─────────────────────┐
                     │  Agent B starts     │
                     │  start_session()    │
-                    │  + winnow-onboard   │
+                    │  + hizal-onboard   │
                     └──────────┬──────────┘
                                │
                                ▼

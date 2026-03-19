@@ -52,7 +52,7 @@ func (h *AuthHandlers) registerUser(ctx context.Context, email, password, name s
 // 4. Creates a default project ("My Project")
 // 5. Generates a default API key scoped to that project
 //
-// Returns everything the user needs to start using Winnow immediately.
+// Returns everything the user needs to start using Hizal immediately.
 func (h *AuthHandlers) Register(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email    string `json:"email"`
@@ -136,7 +136,7 @@ func (h *AuthHandlers) Register(w http.ResponseWriter, r *http.Request) {
 	var projectID string
 	err = tx.QueryRow(r.Context(), `
 		INSERT INTO projects (org_id, name, slug, description)
-		VALUES ($1, 'My Project', 'my-project', 'Your first Winnow project. Connect a repo to get started.')
+		VALUES ($1, 'My Project', 'my-project', 'Your first Hizal project. Connect a repo to get started.')
 		RETURNING id
 	`, orgID).Scan(&projectID)
 	if err != nil {

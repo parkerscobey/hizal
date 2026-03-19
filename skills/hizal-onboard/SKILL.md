@@ -1,9 +1,9 @@
 ---
-name: winnow-onboard
-description: Onboard to a project with Winnow by listing projects, selecting the right project_id, searching for architecture and status context, and summarizing the current mental model.
+name: hizal-onboard
+description: Onboard to a project with Hizal by listing projects, selecting the right project_id, searching for architecture and status context, and summarizing the current mental model.
 ---
 
-# Winnow Onboard
+# Hizal Onboard
 
 Use this skill when the user wants a fast project orientation before coding.
 
@@ -18,7 +18,7 @@ Every session starts with `start_session` and ends with `end_session`. These are
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - `Authorization: Bearer <api-key>`
 
 ## Session Start
@@ -53,12 +53,12 @@ After the primary task is complete and a PR is open:
 
 1. Call `end_session(session_id="<session_id>")` — it returns all SURFACE chunks written during the session.
 2. For each SURFACE chunk, decide: keep (leave as-is), promote (write a new KNOWLEDGE chunk with the content), or discard.
-3. Compact if context retrieval feels noisy — see `winnow-compact`.
+3. Compact if context retrieval feels noisy — see `hizal-compact`.
 
 ## Notes
 
-- Prefer existing Winnow context before reading large portions of the repo.
+- Prefer existing Hizal context before reading large portions of the repo.
 - `start_session` replaces `activate_project` — no such tool exists.
 - `search_context` returns all accessible scopes by default (PROJECT, AGENT, ORG) when no scope filter is set.
 - Use typed write tools instead of `write_context`: `write_knowledge`, `write_memory`, `write_convention`, etc.
-- If Winnow context is sparse, fall back to repo docs, README files, and targeted code search.
+- If Hizal context is sparse, fall back to repo docs, README files, and targeted code search.

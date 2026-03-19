@@ -1,21 +1,21 @@
 package api
 
-const agentOnboardingGuideMarkdown = `# Winnow Agent Onboarding Guide
+const agentOnboardingGuideMarkdown = `# Hizal Agent Onboarding Guide
 
-Winnow is behavior-driven memory infrastructure for AI agents. It stores structured, searchable context that persists across sessions — and uses always-inject chunks to shape how agents behave, not just what they can query.
+Hizal is behavior-driven memory infrastructure for AI agents. It stores structured, searchable context that persists across sessions — and uses always-inject chunks to shape how agents behave, not just what they can query.
 
 ## What This Application Does
 
-Winnow provides:
+Hizal provides:
 
 - An HTTP API for orgs, projects, agents, memberships, and API keys
-- An MCP server over HTTP+SSE so coding agents can use Winnow tools directly
+- An MCP server over HTTP+SSE so coding agents can use Hizal tools directly
 - A Postgres-backed store of versioned context chunks with semantic search (pgvector)
 - Three scopes (PROJECT, AGENT, ORG) with always_inject behavior
 - Purpose-built write tools that route to the correct scope automatically
 - Session lifecycle for tracking agent work and consolidating memory
 
-Important architectural constraint: Winnow does not do server-side summarization. The server stores, searches, versions, and returns chunks. The agent performs synthesis client-side and writes improved context back.
+Important architectural constraint: Hizal does not do server-side summarization. The server stores, searches, versions, and returns chunks. The agent performs synthesis client-side and writes improved context back.
 
 ## Core Domain Model
 
@@ -56,7 +56,7 @@ Orthogonal to scope. Chunks with always_inject=true are surfaced automatically a
 ### Session lifecycle
 
 1. start_session(lifecycle_slug="dev") — creates a session, injects always_inject chunks
-2. register_focus(task="...", project_id="...") — tell Winnow what you're working on
+2. register_focus(task="...", project_id="...") — tell Hizal what you're working on
 3. During work: search, read, write knowledge and memory
 4. end_session(session_id="...") — returns MEMORY chunks for review/promotion
 
@@ -125,7 +125,7 @@ JSON MCP client format:
 ` + "```json" + `
 {
   "mcpServers": {
-    "winnow": {
+    "hizal": {
       "url": "https://winnow-api.xferops.dev/mcp",
       "headers": {
         "Authorization": "Bearer <agent-api-key>"
@@ -138,7 +138,7 @@ JSON MCP client format:
 Codex CLI config.toml format:
 
 ` + "```toml" + `
-[mcp_servers.winnow]
+[mcp_servers.hizal]
 url = "https://winnow-api.xferops.dev/mcp"
 http_headers = { Authorization = "Bearer <agent-api-key>" }
 ` + "```" + `
@@ -150,7 +150,7 @@ http_headers = { Authorization = "Bearer <agent-api-key>" }
 3. Call list_projects to find your target project
 4. Pass project_id on all tool calls
 5. Check if context exists: search_context(query="*", project_id="...", limit=5)
-6. If empty: use the winnow-seed skill to populate foundational context first
+6. If empty: use the hizal-seed skill to populate foundational context first
 7. If context exists: search for architecture, auth, data model, deployment
 8. Read the top results before touching code
 9. register_focus(task="...", project_id="...") to declare your task

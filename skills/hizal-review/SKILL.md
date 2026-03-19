@@ -1,24 +1,24 @@
 ---
-name: winnow-review
-description: Review Winnow context quality by finding relevant chunks, rating their accuracy and usefulness, updating stale content, and removing low-value entries when justified.
+name: hizal-review
+description: Review Hizal context quality by finding relevant chunks, rating their accuracy and usefulness, updating stale content, and removing low-value entries when justified.
 ---
 
-# Winnow Review
+# Hizal Review
 
-Use this skill when the user wants a quality audit of stored Winnow knowledge.
+Use this skill when the user wants a quality audit of stored Hizal knowledge.
 
 Use it for requests like:
-- "Review the Winnow chunks for X"
+- "Review the Hizal chunks for X"
 - "Audit the context for this area"
 - "Clean up stale knowledge"
 
 ## Session Lifecycle
 
-Start a session at the top of any review task — see `winnow-onboard`. End it with `end_session` when done.
+Start a session at the top of any review task — see `hizal-onboard`. End it with `end_session` when done.
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - `Authorization: Bearer <api-key>`
 
 Resolve the `project_id` explicitly for all project-scoped MCP calls.

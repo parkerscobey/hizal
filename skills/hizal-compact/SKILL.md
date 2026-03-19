@@ -1,24 +1,24 @@
 ---
-name: winnow-compact
-description: Compact overlapping Winnow context by gathering related chunks, producing a higher-signal summary, writing it back, and superseding or deleting redundant chunks carefully.
+name: hizal-compact
+description: Compact overlapping Hizal context by gathering related chunks, producing a higher-signal summary, writing it back, and superseding or deleting redundant chunks carefully.
 ---
 
-# Winnow Compact
+# Hizal Compact
 
-Use this skill when Winnow has too many overlapping or low-signal chunks on the same topic.
+Use this skill when Hizal has too many overlapping or low-signal chunks on the same topic.
 
 Use it for requests like:
 - "Compact the context for X"
 - "Merge the research on X"
-- "Clean up noisy Winnow chunks"
+- "Clean up noisy Hizal chunks"
 
 ## Session Lifecycle
 
-Start a session at the top of any compaction task — see `winnow-onboard`. End it with `end_session` when done.
+Start a session at the top of any compaction task — see `hizal-onboard`. End it with `end_session` when done.
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - `Authorization: Bearer <api-key>`
 
 Resolve the `project_id` explicitly for all project-scoped MCP calls.

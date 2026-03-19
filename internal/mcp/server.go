@@ -399,7 +399,7 @@ var toolList = []toolSchema{
 	// Orchestrator tools (WNW-74): only available to orchestrator-type agents
 	{
 		Name:         "create_project",
-		Description:  "Creates a new Winnow project within the orchestrator's org.",
+		Description:  "Creates a new Hizal project within the orchestrator's org.",
 		AllowedTypes: []string{"orchestrator"},
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -499,7 +499,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.Result = map[string]interface{}{
 			"protocolVersion": version,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
-			"serverInfo":      map[string]interface{}{"name": "winnow", "version": "0.2.1"},
+			"serverInfo":      map[string]interface{}{"name": "hizal", "version": "0.3.0"},
 		}
 
 	case "ping":
@@ -1018,7 +1018,7 @@ func (s *Server) requireOrchestrator(ctx context.Context, r *http.Request) error
 	return nil
 }
 
-// createProject creates a new Winnow project within the orchestrator's org.
+// createProject creates a new Hizal project within the orchestrator's org.
 func (s *Server) createProject(ctx context.Context, orgID string, in CreateProjectInput) (*CreateProjectResult, error) {
 	if in.Name == "" {
 		return nil, fmt.Errorf("name is required")

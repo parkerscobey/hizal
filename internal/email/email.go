@@ -4,7 +4,7 @@
 // with tools like Mailpit. Otherwise SES is used when EMAIL_FROM is set.
 //
 // Relevant env vars:
-//   - EMAIL_FROM      — sender address, e.g. "Winnow <noreply@winnow-api.xferops.dev>"
+//   - EMAIL_FROM      — sender address, e.g. "Hizal <noreply@winnow-api.xferops.dev>"
 //   - SMTP_HOST       — SMTP hostname for local/dev delivery
 //   - SMTP_PORT       — SMTP port (defaults to 25)
 //   - SMTP_USERNAME   — optional SMTP username

@@ -36,18 +36,18 @@ func NewSkillHandlers(pool *pgxpool.Pool) *SkillHandlers {
 }
 
 var skillCatalog = map[string]skillDocument{
-	"winnow-onboard": {
-		ID:          "winnow-onboard",
-		Title:       "Winnow Onboard",
-		Description: "Onboard to a project with Winnow by selecting project scope and reading high-signal context first.",
+	"hizal-onboard": {
+		ID:          "hizal-onboard",
+		Title:       "Hizal Onboard",
+		Description: "Onboard to a project with Hizal by selecting project scope and reading high-signal context first.",
 		Purpose:     "Fast project orientation before coding.",
 		Format:      "markdown",
 		Markdown: `---
-name: winnow-onboard
-description: Onboard to a project with Winnow by listing projects, selecting the right project_id, searching for architecture and status context, and summarizing the current mental model.
+name: hizal-onboard
+description: Onboard to a project with Hizal by listing projects, selecting the right project_id, searching for architecture and status context, and summarizing the current mental model.
 ---
 
-# Winnow Onboard
+# Hizal Onboard
 
 Use this skill when the user wants a fast project orientation before coding.
 
@@ -58,7 +58,7 @@ Use it for requests like:
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - ` + "`Authorization: Bearer <api-key>`" + `
 
 Do not assume the active project. Start by discovering or confirming the correct ` + "`project_id`" + `.
@@ -85,25 +85,25 @@ Do not assume the active project. Start by discovering or confirming the correct
 
 ## Notes
 
-- Prefer existing Winnow context before reading large portions of the repo.
+- Prefer existing Hizal context before reading large portions of the repo.
 - Use ` + "`project_id`" + ` on MCP tool calls instead of relying on connection-level project headers.
-- If Winnow context is sparse, fall back to repo docs, README files, and targeted code search.
+- If Hizal context is sparse, fall back to repo docs, README files, and targeted code search.
 `,
 	},
-	"winnow-research": {
-		ID:          "winnow-research",
-		Title:       "Winnow Research",
-		Description: "Research a topic with Winnow by checking existing context first, filling gaps, and writing back a focused summary.",
-		Purpose:     "Research, discovery, and background gathering tied to Winnow.",
+	"hizal-research": {
+		ID:          "hizal-research",
+		Title:       "Hizal Research",
+		Description: "Research a topic with Hizal by checking existing context first, filling gaps, and writing back a focused summary.",
+		Purpose:     "Research, discovery, and background gathering tied to Hizal.",
 		Format:      "markdown",
 		Markdown: `---
-name: winnow-research
-description: Research a topic with Winnow by checking existing context first, reading the relevant chunks, filling gaps from the repo or web, and writing back a focused summary.
+name: hizal-research
+description: Research a topic with Hizal by checking existing context first, reading the relevant chunks, filling gaps from the repo or web, and writing back a focused summary.
 ---
 
-# Winnow Research
+# Hizal Research
 
-Use this skill when the user wants research, discovery, or background gathering tied to Winnow.
+Use this skill when the user wants research, discovery, or background gathering tied to Hizal.
 
 Use it for requests like:
 - "Research X"
@@ -112,7 +112,7 @@ Use it for requests like:
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - ` + "`Authorization: Bearer <api-key>`" + `
 
 Choose the target ` + "`project_id`" + ` explicitly. If the project is unclear, call ` + "`list_projects`" + ` first.
@@ -120,7 +120,7 @@ Choose the target ` + "`project_id`" + ` explicitly. If the project is unclear, 
 ## Workflow
 
 1. Resolve the project with ` + "`list_projects`" + ` when needed.
-2. Search Winnow before doing new work.
+2. Search Hizal before doing new work.
    - ` + "`search_context(query=\"<topic>\", project_id=\"<project_id>\", limit=5)`" + `
 3. Read the top matches with ` + "`read_context`" + `.
 4. If the answer is already present and recent, use it directly.
@@ -136,20 +136,20 @@ Choose the target ` + "`project_id`" + ` explicitly. If the project is unclear, 
 - Use ` + "`project_id`" + ` on MCP tool calls instead of connection-level project headers.
 `,
 	},
-	"winnow-plan": {
-		ID:          "winnow-plan",
-		Title:       "Winnow Plan",
-		Description: "Build a task plan with Winnow by reviewing prior decisions and constraints, then saving the resulting plan.",
-		Purpose:     "Concrete implementation or investigation planning grounded in Winnow context.",
+	"hizal-plan": {
+		ID:          "hizal-plan",
+		Title:       "Hizal Plan",
+		Description: "Build a task plan with Hizal by reviewing prior decisions and constraints, then saving the resulting plan.",
+		Purpose:     "Concrete implementation or investigation planning grounded in Hizal context.",
 		Format:      "markdown",
 		Markdown: `---
-name: winnow-plan
-description: Build a task plan with Winnow by reviewing prior decisions and constraints, drafting an approach, validating it against existing context, and saving the resulting plan.
+name: hizal-plan
+description: Build a task plan with Hizal by reviewing prior decisions and constraints, drafting an approach, validating it against existing context, and saving the resulting plan.
 ---
 
-# Winnow Plan
+# Hizal Plan
 
-Use this skill when the user wants a concrete implementation or investigation plan grounded in Winnow context.
+Use this skill when the user wants a concrete implementation or investigation plan grounded in Hizal context.
 
 Use it for requests like:
 - "Plan how to implement X"
@@ -158,7 +158,7 @@ Use it for requests like:
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - ` + "`Authorization: Bearer <api-key>`" + `
 
 Resolve the ` + "`project_id`" + ` explicitly for all project-scoped MCP calls.
@@ -175,40 +175,40 @@ Resolve the ` + "`project_id`" + ` explicitly for all project-scoped MCP calls.
    - dependencies
    - risks or open questions
    - success criteria
-5. Validate the draft against known conventions or constraints from Winnow.
+5. Validate the draft against known conventions or constraints from Hizal.
 6. Save the finalized plan with ` + "`write_context`" + `.
 7. If the plan changes materially, update it with ` + "`update_context`" + `.
 
 ## Notes
 
-- Plans should reflect known constraints from Winnow, not just a fresh guess.
+- Plans should reflect known constraints from Hizal, not just a fresh guess.
 - Include ticket IDs or other traceable references in the saved plan when available.
 - Use ` + "`project_id`" + ` on MCP tool calls instead of connection-level project headers.
 `,
 	},
-	"winnow-compact": {
-		ID:          "winnow-compact",
-		Title:       "Winnow Compact",
-		Description: "Compact overlapping Winnow context into a higher-signal summary and clean up redundant chunks carefully.",
-		Purpose:     "Reduce noisy or overlapping Winnow context on the same topic.",
+	"hizal-compact": {
+		ID:          "hizal-compact",
+		Title:       "Hizal Compact",
+		Description: "Compact overlapping Hizal context into a higher-signal summary and clean up redundant chunks carefully.",
+		Purpose:     "Reduce noisy or overlapping Hizal context on the same topic.",
 		Format:      "markdown",
 		Markdown: `---
-name: winnow-compact
-description: Compact overlapping Winnow context by gathering related chunks, producing a higher-signal summary, writing it back, and superseding or deleting redundant chunks carefully.
+name: hizal-compact
+description: Compact overlapping Hizal context by gathering related chunks, producing a higher-signal summary, writing it back, and superseding or deleting redundant chunks carefully.
 ---
 
-# Winnow Compact
+# Hizal Compact
 
-Use this skill when Winnow has too many overlapping or low-signal chunks on the same topic.
+Use this skill when Hizal has too many overlapping or low-signal chunks on the same topic.
 
 Use it for requests like:
 - "Compact the context for X"
 - "Merge the research on X"
-- "Clean up noisy Winnow chunks"
+- "Clean up noisy Hizal chunks"
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - ` + "`Authorization: Bearer <api-key>`" + `
 
 Resolve the ` + "`project_id`" + ` explicitly for all project-scoped MCP calls.
@@ -230,31 +230,31 @@ Resolve the ` + "`project_id`" + ` explicitly for all project-scoped MCP calls.
 - Prefer updating stale chunks with a superseded note over deleting them when history matters.
 `,
 	},
-	"winnow-seed": {
-		ID:          "winnow-seed",
-		Title:       "Winnow Seed",
-		Description: "Seed a new or empty Winnow project with foundational context by scanning repos, docs, and configs thoroughly, then writing structured chunks across a planned taxonomy.",
-		Purpose:     "Populate a new Winnow project with its initial knowledge base from a codebase.",
+	"hizal-seed": {
+		ID:          "hizal-seed",
+		Title:       "Hizal Seed",
+		Description: "Seed a new or empty Hizal project with foundational context by scanning repos, docs, and configs thoroughly, then writing structured chunks across a planned taxonomy.",
+		Purpose:     "Populate a new Hizal project with its initial knowledge base from a codebase.",
 		Format:      "markdown",
 		Markdown: `---
-name: winnow-seed
-description: Seed a new or empty Winnow project with foundational context by scanning repos, docs, and configs thoroughly, then writing structured chunks across a planned taxonomy. Use when a project has no context yet, when onboarding a new codebase to Winnow, or when the user says "seed this project" or "backfill context."
+name: hizal-seed
+description: Seed a new or empty Hizal project with foundational context by scanning repos, docs, and configs thoroughly, then writing structured chunks across a planned taxonomy. Use when a project has no context yet, when onboarding a new codebase to Hizal, or when the user says "seed this project" or "backfill context."
 ---
 
-# Winnow Seed
+# Hizal Seed
 
-Use this skill to populate a Winnow project with its initial knowledge base. This is the "day zero" workflow — turning an empty project into something agents can actually onboard from.
+Use this skill to populate a Hizal project with its initial knowledge base. This is the "day zero" workflow — turning an empty project into something agents can actually onboard from.
 
 ## When To Use
 
-- A new Winnow project has been created but has no chunks
-- A codebase has been added to Winnow and needs initial context
+- A new Hizal project has been created but has no chunks
+- A codebase has been added to Hizal and needs initial context
 - The user asks to "seed," "backfill," or "bootstrap" a project
 - ` + "`search_context(query=\"*\")`" + ` returns empty or near-empty results
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - ` + "`Authorization: Bearer <api-key>`" + `
 
 Resolve the ` + "`project_id`" + ` explicitly. If unclear, call ` + "`list_projects`" + ` first.
@@ -269,7 +269,7 @@ Check what already exists:
 search_context(query="*", project_id="<project_id>", limit=50)
 ` + "```" + `
 
-If chunks already exist, this is not a seed — use winnow-research or winnow-compact instead.
+If chunks already exist, this is not a seed — use hizal-research or hizal-compact instead.
 
 ### 2. Gather Source Material
 
@@ -337,29 +337,29 @@ Summarize: total chunks created, categories covered, gaps for future research.
 - Seed chunks are foundational — they will be read hundreds of times. Make them good.
 `,
 	},
-	"winnow-review": {
-		ID:          "winnow-review",
-		Title:       "Winnow Review",
-		Description: "Review Winnow context quality by rating accuracy and usefulness, then correcting or removing low-value entries.",
-		Purpose:     "Quality audit of stored Winnow knowledge.",
+	"hizal-review": {
+		ID:          "hizal-review",
+		Title:       "Hizal Review",
+		Description: "Review Hizal context quality by rating accuracy and usefulness, then correcting or removing low-value entries.",
+		Purpose:     "Quality audit of stored Hizal knowledge.",
 		Format:      "markdown",
 		Markdown: `---
-name: winnow-review
-description: Review Winnow context quality by finding relevant chunks, rating their accuracy and usefulness, updating stale content, and removing low-value entries when justified.
+name: hizal-review
+description: Review Hizal context quality by finding relevant chunks, rating their accuracy and usefulness, updating stale content, and removing low-value entries when justified.
 ---
 
-# Winnow Review
+# Hizal Review
 
-Use this skill when the user wants a quality audit of stored Winnow knowledge.
+Use this skill when the user wants a quality audit of stored Hizal knowledge.
 
 Use it for requests like:
-- "Review the Winnow chunks for X"
+- "Review the Hizal chunks for X"
 - "Audit the context for this area"
 - "Clean up stale knowledge"
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - ` + "`Authorization: Bearer <api-key>`" + `
 
 Resolve the ` + "`project_id`" + ` explicitly for all project-scoped MCP calls.

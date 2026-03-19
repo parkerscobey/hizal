@@ -1,10 +1,10 @@
-# Winnow: Architecture
+# Hizal: Architecture
 
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Winnow Platform                      │
+│                         Hizal Platform                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐    │
@@ -257,7 +257,7 @@ Agent writes compacted summary back via write_context()
 ### Option A: SaaS (Managed)
 
 ```
-api.winnow.io   ──▶  Your hosted Postgres
+api.hizal.io   ──▶  Your hosted Postgres
          │
          └── MCP runs on our servers
 ```

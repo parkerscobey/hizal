@@ -1,6 +1,6 @@
-# Winnow
+# Hizal
 
-**Structured memory for AI agents.** Winnow gives your agents persistent, searchable context that survives across sessions — so they stop forgetting everything and start getting better over time.
+**Structured memory for AI agents.** Hizal gives your agents persistent, searchable context that survives across sessions — so they stop forgetting everything and start getting better over time.
 
 [![CI](https://github.com/XferOps/winnow/actions/workflows/ci.yml/badge.svg)](https://github.com/XferOps/winnow/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -13,11 +13,11 @@ AI coding agents forget everything between sessions. Every new conversation star
 
 Bigger context windows don't fix this. More room to forget isn't memory. The answer isn't more context — it's **structured, persistent knowledge** that agents build and maintain over time.
 
-## What Winnow Does
+## What Hizal Does
 
-Winnow stores structured context chunks with semantic search, versioning, and three-scope ownership. Agents write what they learn. Future agents search and reuse it. Context is deterministically injected instead of evaporating.
+Hizal stores structured context chunks with semantic search, versioning, and three-scope ownership. Agents write what they learn. Future agents search and reuse it. Context is deterministically injected instead of evaporating.
 
-| Without Winnow | With Winnow |
+| Without Hizal | With Hizal |
 |----------------|-------------|
 | Agent re-reads the codebase every session | Agent searches existing knowledge in seconds |
 | Conventions violated repeatedly | Conventions deterministically injected every session |
@@ -28,11 +28,11 @@ Winnow stores structured context chunks with semantic search, versioning, and th
 
 ---
 
-## What Makes Winnow Different
+## What Makes Hizal Different
 
 ### Three Scopes of Ownership
 
-Every chunk in Winnow has a scope. This isn't a filter — it's an ownership model that determines who can see, write, and benefit from each piece of knowledge.
+Every chunk in Hizal has a scope. This isn't a filter — it's an ownership model that determines who can see, write, and benefit from each piece of knowledge.
 
 | Scope | Owner | Visibility | Example |
 |-------|-------|-----------|---------|
@@ -44,7 +44,7 @@ This matters because not all knowledge is the same. An agent's personal observat
 
 ### Deterministic Context Injection
 
-Most context systems are retrieval-only — agents search and hope the right context surfaces. Winnow has a second mode: **always_inject**.
+Most context systems are retrieval-only — agents search and hope the right context surfaces. Hizal has a second mode: **always_inject**.
 
 Chunks marked `always_inject=true` are deterministically loaded into every session. No search required. No chance of missing them. They form a behavioral baseline:
 
@@ -52,11 +52,11 @@ Chunks marked `always_inject=true` are deterministically loaded into every sessi
 - **Conventions** (`write_convention`) — project rules every agent must follow, PROJECT scope
 - **Principles** (`store_principle`) — org values across all agents, ORG scope
 
-This is the difference between "the agent can look up the coding standards" and "the agent always knows the coding standards." Retrieval is probabilistic. Injection is deterministic. Both matter — Winnow gives you both.
+This is the difference between "the agent can look up the coding standards" and "the agent always knows the coding standards." Retrieval is probabilistic. Injection is deterministic. Both matter — Hizal gives you both.
 
 ### Purpose-Built Primitives
 
-Instead of a generic `write(scope, inject, type)` API, Winnow provides six named tools whose names communicate intent and automatically set the right scope and injection behavior:
+Instead of a generic `write(scope, inject, type)` API, Hizal provides six named tools whose names communicate intent and automatically set the right scope and injection behavior:
 
 | Tool | Scope | Injected | Purpose |
 |------|-------|----------|---------|
@@ -73,7 +73,7 @@ The tool name IS the instruction. An agent calling `write_convention` doesn't ne
 
 Not every agent should see every tool. A junior dev agent shouldn't have `create_project`. A research agent doesn't need `store_principle`.
 
-Winnow ships four global agent types — **dev**, **admin**, **research**, **orchestrator** — each with a curated tool surface. Orgs can define custom types that inherit from these or start fresh.
+Hizal ships four global agent types — **dev**, **admin**, **research**, **orchestrator** — each with a curated tool surface. Orgs can define custom types that inherit from these or start fresh.
 
 Session lifecycles work the same way. The `dev` lifecycle gives a 12-hour session with standard inject scopes. The `orchestrator` lifecycle gives 24 hours. Orgs can define custom lifecycles with their own TTLs, required steps, and consolidation thresholds.
 
@@ -103,7 +103,7 @@ Every chunk has a `chunk_type` that describes its content and determines how it'
 
 ### Sessions
 
-Sessions are first-class objects in Winnow, not an afterthought. They track the full arc of an agent's work:
+Sessions are first-class objects in Hizal, not an afterthought. They track the full arc of an agent's work:
 
 ```
 start_session(lifecycle_slug="dev")
@@ -135,7 +135,7 @@ Sessions also track metrics — chunks read, chunks written, resume count — so
 **Self-host:**
 ```bash
 git clone https://github.com/XferOps/winnow.git
-cd winnow
+cd hizal
 cp .env.example .env  # configure DATABASE_URL and OPENAI_API_KEY
 make migrate
 make dev
@@ -150,8 +150,8 @@ Add to your MCP config (Claude Desktop, Cursor, OpenClaw, OpenCode, or any MCP c
 ```json
 {
   "mcpServers": {
-    "winnow": {
-      "url": "https://your-winnow-instance/mcp",
+    "hizal": {
+      "url": "https://your-hizal-instance/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_API_KEY"
       }
@@ -189,7 +189,7 @@ Next session — knowledge is still there. Identity loads automatically. Convent
 
 ```
 ┌────────────┐      ┌────────────┐      ┌──────────────────┐
-│ Your Agent │─MCP─▶│ Winnow API │─────▶│ PostgreSQL       │
+│ Your Agent │─MCP─▶│ Hizal API │─────▶│ PostgreSQL       │
 │            │      │  (Go)      │      │ + pgvector       │
 └────────────┘      └────────────┘      └──────────────────┘
                           │
@@ -209,7 +209,7 @@ Next session — knowledge is still there. Identity loads automatically. Convent
 Every feature is built as a primitive first, then assembled into simple experiences:
 
 1. **Primitives** — MCP tools (`search_context`, `write_knowledge`, `compact_context`) are powerful and composable
-2. **Simple experiences for agents** — Skills (`winnow-seed`, `winnow-research`, `winnow-plan`) are guided workflows built on primitives
+2. **Simple experiences for agents** — Skills (`hizal-seed`, `hizal-research`, `hizal-plan`) are guided workflows built on primitives
 3. **Simple experiences for humans** — UI dashboards for viewing and managing context
 
 Power users access primitives directly. Guided workflows use the same primitives underneath. Nobody outgrows the product.
@@ -236,12 +236,12 @@ Pre-built workflows composed from MCP primitives:
 
 | Skill | Purpose |
 |-------|---------|
-| `winnow-seed` | Populate a new project with foundational context |
-| `winnow-research` | Investigate a topic, fill knowledge gaps |
-| `winnow-plan` | Create implementation plans validated against context |
-| `winnow-compact` | Merge overlapping chunks into cleaner summaries |
-| `winnow-review` | Rate and improve context quality |
-| `winnow-onboard` | Get up to speed on a project fast |
+| `hizal-seed` | Populate a new project with foundational context |
+| `hizal-research` | Investigate a topic, fill knowledge gaps |
+| `hizal-plan` | Create implementation plans validated against context |
+| `hizal-compact` | Merge overlapping chunks into cleaner summaries |
+| `hizal-review` | Rate and improve context quality |
+| `hizal-onboard` | Get up to speed on a project fast |
 
 Skills live in `skills/` — each has a `SKILL.md` with full workflow instructions.
 
@@ -291,4 +291,6 @@ Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
 ---
 
-Built by [XferOps](https://xferops.com). We run a team of AI agents building software. Winnow is how they remember.
+Built by [XferOps](https://xferops.com). We run a team of AI agents building software. Hizal is how they remember.
+
+*The name comes from [mycorrhizal](https://en.wikipedia.org/wiki/Mycorrhiza) — the underground fungal network that connects trees, letting them share nutrients and warnings. Hizal does the same thing for AI agents.*

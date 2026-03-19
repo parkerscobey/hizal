@@ -1,4 +1,4 @@
-# Winnow REST API Reference
+# Hizal REST API Reference
 
 Base URL: `https://winnow-api.xferops.dev`
 
@@ -88,9 +88,9 @@ Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
 **Response 200:**
 ```json
 {
-  "application": "winnow",
+  "application": "hizal",
   "version": "0.2.1",
-  "guide_markdown": "# Winnow Agent Onboarding Guide\n...",
+  "guide_markdown": "# Hizal Agent Onboarding Guide\n...",
   "key": {
     "id": "key_123",
     "name": "agent key",
@@ -116,12 +116,12 @@ Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
   "needs_project_selection": false,
   "skills": [
     {
-      "id": "winnow-onboard",
-      "title": "Winnow Onboard",
-      "description": "Onboard to a project with Winnow by selecting project scope and reading high-signal context first.",
+      "id": "hizal-onboard",
+      "title": "Hizal Onboard",
+      "description": "Onboard to a project with Hizal by selecting project scope and reading high-signal context first.",
       "purpose": "Fast project orientation before coding.",
       "format": "markdown",
-      "url": "/api/v1/skills/winnow-onboard"
+      "url": "/api/v1/skills/hizal-onboard"
     }
   ],
   "available_projects": [
@@ -159,7 +159,7 @@ Authorization: Bearer ctx_your-org_YOUR_KEY_HERE
     "project_selection": "Pass project_id in MCP tool arguments. Context REST requests still accept project_id query param or X-Project-ID header."
   },
   "instructions": [
-    "Use Winnow before exploring the codebase directly.",
+    "Use Hizal before exploring the codebase directly.",
     "Choose one project from available_projects or call list_projects, then pass project_id on subsequent MCP tool calls."
   ],
   "chunk_shape": {
@@ -207,7 +207,7 @@ Authorization: Bearer <jwt>
 
 Returns the same payload shape as `GET /api/v1/agent-onboarding`.
 
-Skill links in this JWT-authenticated response use agent-scoped URLs like `/api/v1/agents/:id/skills/winnow-onboard`.
+Skill links in this JWT-authenticated response use agent-scoped URLs like `/api/v1/agents/:id/skills/hizal-onboard`.
 
 **Notes:**
 
@@ -228,12 +228,12 @@ Authorization: Bearer <jwt-or-api-key>
 {
   "skills": [
     {
-      "id": "winnow-onboard",
-      "title": "Winnow Onboard",
-      "description": "Onboard to a project with Winnow by selecting project scope and reading high-signal context first.",
+      "id": "hizal-onboard",
+      "title": "Hizal Onboard",
+      "description": "Onboard to a project with Hizal by selecting project scope and reading high-signal context first.",
       "purpose": "Fast project orientation before coding.",
       "format": "markdown",
-      "url": "/api/v1/skills/winnow-onboard"
+      "url": "/api/v1/skills/hizal-onboard"
     }
   ]
 }
@@ -254,12 +254,12 @@ Authorization: Bearer <jwt-or-api-key>
 **Response 200:**
 ```json
 {
-  "id": "winnow-onboard",
-  "title": "Winnow Onboard",
-  "description": "Onboard to a project with Winnow by selecting project scope and reading high-signal context first.",
+  "id": "hizal-onboard",
+  "title": "Hizal Onboard",
+  "description": "Onboard to a project with Hizal by selecting project scope and reading high-signal context first.",
   "purpose": "Fast project orientation before coding.",
   "format": "markdown",
-  "markdown": "---\nname: winnow-onboard\n..."
+  "markdown": "---\nname: hizal-onboard\n..."
 }
 ```
 

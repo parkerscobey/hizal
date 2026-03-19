@@ -1,26 +1,26 @@
 ---
-name: winnow-seed
-description: Seed a new or empty Winnow project with foundational context by scanning repos, docs, and configs thoroughly, then writing structured chunks across a planned taxonomy. Use when a project has no context yet, when onboarding a new codebase to Winnow, or when the user says "seed this project" or "backfill context."
+name: hizal-seed
+description: Seed a new or empty Hizal project with foundational context by scanning repos, docs, and configs thoroughly, then writing structured chunks across a planned taxonomy. Use when a project has no context yet, when onboarding a new codebase to Hizal, or when the user says "seed this project" or "backfill context."
 ---
 
-# Winnow Seed
+# Hizal Seed
 
-Use this skill to populate a Winnow project with its initial knowledge base. This is the "day zero" workflow — turning an empty project into something agents can actually onboard from.
+Use this skill to populate a Hizal project with its initial knowledge base. This is the "day zero" workflow — turning an empty project into something agents can actually onboard from.
 
 ## Session Lifecycle
 
-Start a session at the top of any seeding task — see `winnow-onboard`. End it with `end_session` when done.
+Start a session at the top of any seeding task — see `hizal-onboard`. End it with `end_session` when done.
 
 ## When To Use
 
-- A new Winnow project has been created but has no chunks
-- A codebase has been added to Winnow and needs initial context
+- A new Hizal project has been created but has no chunks
+- A codebase has been added to Hizal and needs initial context
 - The user asks to "seed," "backfill," or "bootstrap" a project
 - `search_context(query="*")` returns empty or near-empty results
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - `Authorization: Bearer <api-key>`
 
 Resolve the `project_id` explicitly. If unclear, call `list_projects` first.
@@ -35,7 +35,7 @@ Before writing anything, check what already exists:
 search_context(query="*", project_id="<project_id>", limit=50)
 ```
 
-If chunks already exist, this is not a seed — use `winnow-research` or `winnow-compact` instead.
+If chunks already exist, this is not a seed — use `hizal-research` or `hizal-compact` instead.
 
 ### 2. Gather Source Material
 

@@ -1,6 +1,6 @@
-# Contributing to Winnow
+# Contributing to Hizal
 
-Thanks for your interest in contributing to Winnow! This guide will help you get started.
+Thanks for your interest in contributing to Hizal! This guide will help you get started.
 
 ## Getting Started
 
@@ -15,7 +15,7 @@ Thanks for your interest in contributing to Winnow! This guide will help you get
 ```bash
 # Clone the repo
 git clone https://github.com/XferOps/winnow.git
-cd winnow
+cd hizal
 
 # Copy env template
 cp .env.example .env

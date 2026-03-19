@@ -39,13 +39,13 @@ CORS_ALLOW_ORIGINS=http://localhost:5173
 # CORS_ALLOW_ORIGINS=*
 
 # Database (matches docker-compose.yml)
-DATABASE_URL=postgres://user:password@localhost:5434/winnow?sslmode=disable
+DATABASE_URL=postgres://user:password@localhost:5434/hizal?sslmode=disable
 
 # App URLs
 APP_BASE_URL=http://localhost:5173
 
 # Local email delivery (Mailpit)
-EMAIL_FROM=Winnow Local <noreply@winnow.local>
+EMAIL_FROM=Hizal Local <noreply@hizal.local>
 SMTP_HOST=localhost
 SMTP_PORT=1025
 

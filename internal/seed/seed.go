@@ -139,7 +139,7 @@ func run(ctx context.Context, tools *mcp.Tools, req Request, ch chan<- Event) {
 	if len(filtered) == 0 {
 		emit(ch, EventError, ErrorData{
 			Code:    "NO_FILES_FOUND",
-			Message: "No recognisable source files found in this repo. Try the winnow-seed skill for manual seeding.",
+			Message: "No recognisable source files found in this repo. Try the hizal-seed skill for manual seeding.",
 		})
 		return
 	}

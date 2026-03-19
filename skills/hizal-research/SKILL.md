@@ -1,11 +1,11 @@
 ---
-name: winnow-research
-description: Research a topic with Winnow by checking existing context first, reading the relevant chunks, filling gaps from the repo or web, and writing back a focused summary.
+name: hizal-research
+description: Research a topic with Hizal by checking existing context first, reading the relevant chunks, filling gaps from the repo or web, and writing back a focused summary.
 ---
 
-# Winnow Research
+# Hizal Research
 
-Use this skill when the user wants research, discovery, or background gathering tied to Winnow.
+Use this skill when the user wants research, discovery, or background gathering tied to Hizal.
 
 Use it for requests like:
 - "Research X"
@@ -14,11 +14,11 @@ Use it for requests like:
 
 ## Session Lifecycle
 
-Start a session at the top of any research task — see `winnow-onboard`. End it with `end_session` when done.
+Start a session at the top of any research task — see `hizal-onboard`. End it with `end_session` when done.
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - `Authorization: Bearer <api-key>`
 
 Choose the target `project_id` explicitly. If the project is unclear, call `list_projects` first.
@@ -26,7 +26,7 @@ Choose the target `project_id` explicitly. If the project is unclear, call `list
 ## Workflow
 
 1. Resolve the project with `list_projects` when needed.
-2. Search Winnow before doing new work.
+2. Search Hizal before doing new work.
    - `search_context(query="<topic>", project_id="<project_id>", limit=5)`
 3. Read the top matches with `read_context`.
 4. If the answer is already present and recent, use it directly.

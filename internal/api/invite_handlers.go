@@ -107,7 +107,7 @@ func (h *InviteHandlers) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		html, text := email.InviteExistingUserEmail(orgName, loginURL)
 		_ = h.email.Send(r.Context(), email.Message{
 			To:      body.Email,
-			Subject: fmt.Sprintf("You've been added to %s on Winnow", orgName),
+			Subject: fmt.Sprintf("You've been added to %s on Hizal", orgName),
 			HTML:    html,
 			Text:    text,
 		})
@@ -148,7 +148,7 @@ func (h *InviteHandlers) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	html, text := email.InviteEmail(orgName, inviteURL)
 	_ = h.email.Send(r.Context(), email.Message{
 		To:      body.Email,
-		Subject: fmt.Sprintf("You've been invited to join %s on Winnow", orgName),
+		Subject: fmt.Sprintf("You've been invited to join %s on Hizal", orgName),
 		HTML:    html,
 		Text:    text,
 	})
@@ -267,7 +267,7 @@ func (h *InviteHandlers) ResendInvite(w http.ResponseWriter, r *http.Request) {
 	html, text := email.InviteEmail(orgName, inviteURL)
 	if err := h.email.Send(r.Context(), email.Message{
 		To:      inviteEmail,
-		Subject: fmt.Sprintf("You've been invited to join %s on Winnow", orgName),
+		Subject: fmt.Sprintf("You've been invited to join %s on Hizal", orgName),
 		HTML:    html,
 		Text:    text,
 	}); err != nil {

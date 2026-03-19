@@ -1,4 +1,4 @@
-// Package usage provides lightweight analytics tracking for Winnow API calls.
+// Package usage provides lightweight analytics tracking for Hizal API calls.
 // Each request upserts a daily counter row via ON CONFLICT DO UPDATE.
 package usage
 

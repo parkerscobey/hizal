@@ -1,11 +1,11 @@
 ---
-name: winnow-plan
-description: Build a task plan with Winnow by reviewing prior decisions and constraints, drafting an approach, validating it against existing context, and saving the resulting plan.
+name: hizal-plan
+description: Build a task plan with Hizal by reviewing prior decisions and constraints, drafting an approach, validating it against existing context, and saving the resulting plan.
 ---
 
-# Winnow Plan
+# Hizal Plan
 
-Use this skill when the user wants a concrete implementation or investigation plan grounded in Winnow context.
+Use this skill when the user wants a concrete implementation or investigation plan grounded in Hizal context.
 
 Use it for requests like:
 - "Plan how to implement X"
@@ -14,11 +14,11 @@ Use it for requests like:
 
 ## Session Lifecycle
 
-Start a session at the top of any planning task — see `winnow-onboard`. End it with `end_session` when done.
+Start a session at the top of any planning task — see `hizal-onboard`. End it with `end_session` when done.
 
 ## Setup
 
-Expect a Winnow MCP server to be configured with:
+Expect a Hizal MCP server to be configured with:
 - `Authorization: Bearer <api-key>`
 
 Resolve the `project_id` explicitly for all project-scoped MCP calls.
@@ -38,7 +38,7 @@ Resolve the `project_id` explicitly for all project-scoped MCP calls.
    - dependencies
    - risks or open questions
    - success criteria
-6. Validate the draft against known conventions or constraints from Winnow.
+6. Validate the draft against known conventions or constraints from Hizal.
 7. Save the plan with `write_chunk(type="PLAN", project_id="<project_id>")`. Plans are SURFACE — they are reviewed at end_session and promoted to KNOWLEDGE if still valuable.
 8. If the plan changes materially, update it with `update_context`.
 
@@ -63,6 +63,6 @@ If any answer is no, use `write_knowledge` or `write_memory` instead.
 
 ## Notes
 
-- Plans should reflect known constraints from Winnow, not just a fresh guess.
+- Plans should reflect known constraints from Hizal, not just a fresh guess.
 - Include ticket IDs or other traceable references in the saved plan when available.
 - Use typed write tools instead of `write_context`.

@@ -1,12 +1,12 @@
 ---
-description: Rules for working on the Winnow codebase (Go API + MCP server)
+description: Rules for working on the Hizal codebase (Go API + MCP server)
 globs: ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.md"]
 ---
 
-# Winnow Development Rules
+# Hizal Development Rules
 
-## What is Winnow?
-Winnow is behavior-driven memory infrastructure for AI agents. Go API with PostgreSQL + pgvector for semantic search, MCP server over HTTP+SSE.
+## What is Hizal?
+Hizal is behavior-driven memory infrastructure for AI agents. Go API with PostgreSQL + pgvector for semantic search, MCP server over HTTP+SSE.
 
 ## Core Architecture
 
@@ -29,7 +29,7 @@ Winnow is behavior-driven memory infrastructure for AI agents. Go API with Postg
 ```
 ctx_{org-slug}_{random}
 ```
-Never hardcode keys. Use `WINNOW_API_KEY` env var.
+Never hardcode keys. Use `HIZAL_API_KEY` env var.
 
 ## MCP Tools (all in internal/mcp/server.go)
 

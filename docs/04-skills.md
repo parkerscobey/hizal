@@ -1,4 +1,4 @@
-# Winnow: Skills Specification
+# Hizal: Skills Specification
 
 ## Overview
 
@@ -8,15 +8,15 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 ---
 
-## Skill: winnow-seed
+## Skill: hizal-seed
 
-**Purpose:** Populate a new Winnow project with foundational context from a codebase.
+**Purpose:** Populate a new Hizal project with foundational context from a codebase.
 
 **Tools used:** `write_knowledge`, `write_convention`
 
 **When to use:**
 - A new project has been created but has no chunks
-- A codebase is being onboarded to Winnow for the first time
+- A codebase is being onboarded to Hizal for the first time
 - `search_context(query="*")` returns empty or near-empty results
 
 **Workflow:**
@@ -35,7 +35,7 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 ---
 
-## Skill: winnow-research
+## Skill: hizal-research
 
 **Purpose:** Investigate a topic, filling gaps in existing context.
 
@@ -61,7 +61,7 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 ---
 
-## Skill: winnow-plan
+## Skill: hizal-plan
 
 **Purpose:** Create an implementation plan validated against existing context.
 
@@ -81,7 +81,7 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 ---
 
-## Skill: winnow-compact
+## Skill: hizal-compact
 
 **Purpose:** Compress overlapping or noisy context into higher-signal chunks.
 
@@ -106,7 +106,7 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 ---
 
-## Skill: winnow-onboard
+## Skill: hizal-onboard
 
 **Purpose:** Quickly get an agent up to speed on a project.
 
@@ -128,7 +128,7 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 ---
 
-## Skill: winnow-review
+## Skill: hizal-review
 
 **Purpose:** Validate and improve context quality through structured reviews.
 
@@ -154,17 +154,17 @@ The local `skills/` directory contains the canonical SKILL.md files that MCP cli
 
 | Skill | Primary write tool | Chunk type |
 |-------|-------------------|------------|
-| winnow-seed | `write_knowledge`, `write_convention` | KNOWLEDGE, CONVENTION |
-| winnow-research | `write_knowledge`, `write_memory` | KNOWLEDGE, MEMORY, RESEARCH |
-| winnow-plan | `write_knowledge` | PLAN |
-| winnow-compact | `write_knowledge` | KNOWLEDGE (compacted) |
-| winnow-review | `update_context` (fixes) | (preserves original type) |
+| hizal-seed | `write_knowledge`, `write_convention` | KNOWLEDGE, CONVENTION |
+| hizal-research | `write_knowledge`, `write_memory` | KNOWLEDGE, MEMORY, RESEARCH |
+| hizal-plan | `write_knowledge` | PLAN |
+| hizal-compact | `write_knowledge` | KNOWLEDGE (compacted) |
+| hizal-review | `update_context` (fixes) | (preserves original type) |
 
 ### Session integration
 
-- **winnow-onboard** should be the first skill used in any session after `start_session`
-- **winnow-compact** should be called before `end_session` if chunks were written
-- **winnow-review** should be called after relying on context to complete work
+- **hizal-onboard** should be the first skill used in any session after `start_session`
+- **hizal-compact** should be called before `end_session` if chunks were written
+- **hizal-review** should be called after relying on context to complete work
 
 ---
 

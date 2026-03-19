@@ -61,7 +61,7 @@ Only shown if the org has no `store_principle` chunks:
 
 ### Step 5: Behavior Driver Output
 Generate a ready-to-copy AGENTS.md snippet tailored to this agent:
-- Winnow MCP config
+- Hizal MCP config
 - When to call each tool
 - Consolidation instructions
 - Session recovery guidance
@@ -76,13 +76,13 @@ Generate a ready-to-copy AGENTS.md snippet tailored to this agent:
 
 For self-hosters who want to provision agents manually using MCP tools.
 
-### 1. Connect to Winnow MCP
+### 1. Connect to Hizal MCP
 
 **JSON MCP clients (Claude Desktop, Cursor, OpenClaw, OpenCode):**
 ```json
 {
   "mcpServers": {
-    "winnow": {
+    "hizal": {
       "url": "https://winnow-api.xferops.dev/mcp",
       "headers": {
         "Authorization": "Bearer ctx_your-org_YOUR_KEY_HERE"
@@ -94,7 +94,7 @@ For self-hosters who want to provision agents manually using MCP tools.
 
 **Codex CLI (config.toml):**
 ```toml
-[mcp_servers.winnow]
+[mcp_servers.hizal]
 url = "https://winnow-api.xferops.dev/mcp"
 http_headers = { Authorization = "Bearer ctx_your-org_YOUR_KEY_HERE" }
 ```
@@ -159,7 +159,7 @@ write_convention(
 
 ### 5. Configure AGENTS.md
 
-Add Winnow session lifecycle to your agent's AGENTS.md or equivalent:
+Add Hizal session lifecycle to your agent's AGENTS.md or equivalent:
 
 ```markdown
 ## Every Session
@@ -177,8 +177,8 @@ Add Winnow session lifecycle to your agent's AGENTS.md or equivalent:
 
 ## End of Session
 
-- Compact if needed: `winnow-compact`
-- Review used chunks: `winnow-review`
+- Compact if needed: `hizal-compact`
+- Review used chunks: `hizal-review`
 - End session: `end_session(session_id="...")`
 ```
 

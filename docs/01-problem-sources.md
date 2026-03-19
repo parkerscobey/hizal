@@ -1,8 +1,8 @@
-# Winnow: Problem Statement & Research Sources
+# Hizal: Problem Statement & Research Sources
 
 ## Executive Summary
 
-Winnow is behavior-driven memory infrastructure for AI agents. It helps agents maintain identity, follow conventions, and accumulate knowledge across sessions — not just answer queries, but behave consistently and improve over time.
+Hizal is behavior-driven memory infrastructure for AI agents. It helps agents maintain identity, follow conventions, and accumulate knowledge across sessions — not just answer queries, but behave consistently and improve over time.
 
 ## Problem Statement
 
@@ -55,7 +55,7 @@ AI agents forget everything between sessions. Every new conversation starts from
 
 **Key Concepts Adopted:**
 
-| Concept | Description | Winnow Alignment |
+| Concept | Description | Hizal Alignment |
 |---------|-------------|---------------------|
 | Context Engineering | Actively managing what info is in the context window | Core to design |
 | Dumb Zone | Context >40% causes performance degradation | Drives compaction feature |
@@ -85,7 +85,7 @@ AI agents forget everything between sessions. Every new conversation starts from
 - No agent identity or memory
 - No human-accessible UI for reading context
 
-**Gap Winnow fills:**
+**Gap Hizal fills:**
 - Three scopes (PROJECT, AGENT, ORG) with always_inject behavior
 - Purpose-built write tools (not generic doc writes)
 - Agent identity and episodic memory
@@ -100,7 +100,7 @@ AI agents forget everything between sessions. Every new conversation starts from
 2. **Context windows are getting bigger** — But the "dumb zone" problem gets worse, not better
 3. **Teams are adapting** — Workflow redesign is the competitive advantage
 4. **Agent memory is unserved** — Existing tools manage documents, not agent behavior
-5. **The tool we want doesn't exist** — We built Winnow because we needed it
+5. **The tool we want doesn't exist** — We built Hizal because we needed it
 
 ---
 

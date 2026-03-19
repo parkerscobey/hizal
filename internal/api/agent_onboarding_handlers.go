@@ -82,7 +82,7 @@ func (h *AgentOnboardingHandlers) buildResponse(key models.APIKey, org models.Or
 
 	instructions := []string{
 		"Check if the project has context first: search_context(query=\"*\", limit=5). If empty or sparse, use the winnow-seed skill to populate foundational context before doing anything else.",
-		"Use Winnow before exploring the codebase directly. Search existing context first, then read the top chunks.",
+		"Use Hizal before exploring the codebase directly. Search existing context first, then read the top chunks.",
 		"If context is missing, stale, or incomplete, inspect the codebase and write or update structured chunks with concrete file references and gotchas.",
 		"Before handoff or after a long working session, use compact_context and write back a summary chunk for the next agent.",
 		"After relying on context to complete work, submit a review with usefulness, correctness, and an action.",
@@ -107,7 +107,7 @@ func (h *AgentOnboardingHandlers) buildResponse(key models.APIKey, org models.Or
 	}
 
 	return map[string]interface{}{
-		"application":    "winnow",
+		"application":    "hizal",
 		"version":        version,
 		"guide_markdown": agentOnboardingGuideMarkdown,
 		"key": map[string]interface{}{

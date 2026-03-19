@@ -1,8 +1,8 @@
-# Winnow: MCP Tools Reference
+# Hizal: MCP Tools Reference
 
 ## Overview
 
-Winnow exposes MCP tools over HTTP+SSE for AI agents to manage context. Tools are organized into four categories: **session lifecycle**, **purpose-built writes**, **reads and search**, and **project management**.
+Hizal exposes MCP tools over HTTP+SSE for AI agents to manage context. Tools are organized into four categories: **session lifecycle**, **purpose-built writes**, **reads and search**, and **project management**.
 
 All tools require `Authorization: Bearer <api-key>` configured once in your MCP client.
 
@@ -52,7 +52,7 @@ Check if the current agent has an active session. Useful for session recovery af
 
 ### register_focus
 
-Tell Winnow what you're working on. Enables future SSE notifications when other agents write context relevant to your focus.
+Tell Hizal what you're working on. Enables future SSE notifications when other agents write context relevant to your focus.
 
 **Input:**
 ```json

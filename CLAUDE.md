@@ -1,8 +1,8 @@
-# CLAUDE.md — Winnow Development Guide
+# CLAUDE.md — Hizal Development Guide
 
 ## What is This?
 
-Winnow is a behavior-driven memory API for AI agents. Go backend with PostgreSQL + pgvector for semantic search, MCP server over HTTP+SSE for agent tooling.
+Hizal is a behavior-driven memory API for AI agents. Go backend with PostgreSQL + pgvector for semantic search, MCP server over HTTP+SSE for agent tooling.
 
 ## Quick Start
 
@@ -88,9 +88,9 @@ if len(results) > 0 && results[0].Score > 0.85 {
 ## Skills
 
 Agent workflow packages in `skills/`:
-- `winnow-seed` — populate empty projects
-- `winnow-research` — investigate + write knowledge
-- `winnow-plan` — create validated implementation plans
-- `winnow-compact` — compress noisy context
-- `winnow-review` — rate and improve quality
-- `winnow-onboard` — fast project orientation
+- `hizal-seed` — populate empty projects
+- `hizal-research` — investigate + write knowledge
+- `hizal-plan` — create validated implementation plans
+- `hizal-compact` — compress noisy context
+- `hizal-review` — rate and improve quality
+- `hizal-onboard` — fast project orientation

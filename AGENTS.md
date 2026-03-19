@@ -1,26 +1,26 @@
-# AGENTS.md — Winnow Dev Agent Operating Procedures
+# AGENTS.md — Hizal Dev Agent Operating Procedures
 
-You are a dev agent working on the Winnow codebase (Go API + React/Vite frontend).
+You are a dev agent working on the Hizal codebase (Go API + React/Vite frontend).
 This file tells you how to work here. Read it fully before doing anything else.
 
-Winnow is both the product you're building and the memory system you use to build it.
-Everything — specs, decisions, conventions, lessons — lives in Winnow.
+Hizal is both the product you're building and the memory system you use to build it.
+Everything — specs, decisions, conventions, lessons — lives in Hizal.
 
 ---
 
 ## Your First Three Steps (always, no exceptions)
 
-1. **Start a Winnow session**
-2. **Read the task spec (from Winnow)**
-3. **Search Winnow for existing context on the task**
+1. **Start a Hizal session**
+2. **Read the task spec (from Hizal)**
+3. **Search Hizal for existing context on the task**
 
 Only then start writing code.
 
 ---
 
-## 1. Start a Winnow Session
+## 1. Start a Hizal Session
 
-Every dev session starts and ends with Winnow.
+Every dev session starts and ends with Hizal.
 
 ```
 start_session(lifecycle_slug="dev")
@@ -53,7 +53,7 @@ get_active_session()
 
 ## 2. Read the Task Spec
 
-Specs are Winnow chunks with `chunk_type=SPEC`. Find your assigned work:
+Specs are Hizal chunks with `chunk_type=SPEC`. Find your assigned work:
 
 ```
 search_context(query="spec status TODO", project_id="<project-id>")
@@ -78,7 +78,7 @@ title: "WNW-XX: Human-readable title"
 **Priority:** CRITICAL | HIGH | MEDIUM | LOW
 **Status:** TODO | IN_PROGRESS | CODE_REVIEW | DONE | BLOCKED
 **Type:** BUG | FEATURE | CHORE
-**Repo:** winnow | winnow-ui
+**Repo:** hizal | hizal-ui
 **Depends on:** spec-wnw-YY (or "none")
 **Assigned:** <agent-name> | unassigned
 **PR:** <url when created>
@@ -96,7 +96,7 @@ What needs to be built or fixed.
 
 ---
 
-## 3. Search Winnow for Existing Context
+## 3. Search Hizal for Existing Context
 
 Now that you know what you're building, search for prior decisions and conventions:
 
@@ -151,7 +151,7 @@ go test ./... -race -timeout 60s
 
 ---
 
-## Write to Winnow As You Build
+## Write to Hizal As You Build
 
 This is not optional. Write chunks as you make decisions — not just at the end.
 
@@ -248,5 +248,5 @@ search_context(query="spec WNW", project_id="<project-id>")
 ## The Principle
 
 The prompt that kicked off your session is just a door opener.
-Everything else — the spec, the conventions, the prior decisions — lives in Winnow.
+Everything else — the spec, the conventions, the prior decisions — lives in Hizal.
 Read those first. Code second.
