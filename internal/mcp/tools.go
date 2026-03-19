@@ -551,7 +551,7 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 	}
 
 	// last_review_at: most recent review date, or updated_at if no reviews exist.
-	const searchCols = `cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+	const searchCols = `cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding::text, cc.source_file,
 			cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 			COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
 			COALESCE(1 - (cc.embedding <=> $1), 0) AS score,
@@ -644,7 +644,7 @@ func (t *Tools) ReadContext(ctx context.Context, projectID string, in ReadContex
 
 	query := `
 		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.always_inject, cc.chunk_type,
-		       cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file, cc.source_lines,
+		       cc.query_key, cc.title, cc.content, cc.embedding::text, cc.source_file, cc.source_lines,
 		       cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
 		FROM context_chunks cc
@@ -858,7 +858,7 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 	limIdx := len(args)
 
 	query := fmt.Sprintf(`
-		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding, cc.source_file,
+		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding::text, cc.source_file,
 		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
 		       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
@@ -1695,6 +1695,7 @@ func scanChunkRow(row pgxScanner) (models.ContextChunk, int, error) {
 func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
 	var chunk models.ContextChunk
 	var version int
+	var embeddingText *string
 	err := row.Scan(
 		&chunk.ID,
 		&chunk.ProjectID,
@@ -1706,7 +1707,7 @@ func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
 		&chunk.QueryKey,
 		&chunk.Title,
 		&chunk.Content,
-		&chunk.Embedding,
+		&embeddingText,
 		&chunk.SourceFile,
 		&chunk.SourceLines,
 		&chunk.Gotchas,
@@ -1716,6 +1717,9 @@ func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
 		&chunk.UpdatedAt,
 		&version,
 	)
+	if err == nil && embeddingText != nil {
+		err = chunk.Embedding.Parse(*embeddingText)
+	}
 	return chunk, version, err
 }
 
@@ -1723,13 +1727,14 @@ func scanChunkResultRow(row pgxScanner) (models.ContextChunk, int, float64, erro
 	var chunk models.ContextChunk
 	var version int
 	var score float64
+	var embeddingText *string
 	err := row.Scan(
 		&chunk.ID,
 		&chunk.ProjectID,
 		&chunk.QueryKey,
 		&chunk.Title,
 		&chunk.Content,
-		&chunk.Embedding,
+		&embeddingText,
 		&chunk.SourceFile,
 		&chunk.SourceLines,
 		&chunk.Gotchas,
@@ -1740,6 +1745,9 @@ func scanChunkResultRow(row pgxScanner) (models.ContextChunk, int, float64, erro
 		&version,
 		&score,
 	)
+	if err == nil && embeddingText != nil {
+		err = chunk.Embedding.Parse(*embeddingText)
+	}
 	return chunk, version, score, err
 }
 
@@ -1750,13 +1758,14 @@ func scanChunkSearchRow(row pgxScanner) (models.ContextChunk, int, float64, time
 	var version int
 	var score float64
 	var lastReviewAt time.Time
+	var embeddingText *string
 	err := row.Scan(
 		&chunk.ID,
 		&chunk.ProjectID,
 		&chunk.QueryKey,
 		&chunk.Title,
 		&chunk.Content,
-		&chunk.Embedding,
+		&embeddingText,
 		&chunk.SourceFile,
 		&chunk.SourceLines,
 		&chunk.Gotchas,
@@ -1768,6 +1777,9 @@ func scanChunkSearchRow(row pgxScanner) (models.ContextChunk, int, float64, time
 		&score,
 		&lastReviewAt,
 	)
+	if err == nil && embeddingText != nil {
+		err = chunk.Embedding.Parse(*embeddingText)
+	}
 	return chunk, version, score, lastReviewAt, err
 }
 

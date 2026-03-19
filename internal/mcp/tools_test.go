@@ -14,7 +14,6 @@ import (
 	"github.com/XferOps/winnow/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pgvector/pgvector-go"
 )
 
 func TestComputeFreshness(t *testing.T) {
@@ -93,6 +92,7 @@ func TestScanChunkSearchRow(t *testing.T) {
 	sourceFile := "internal/api/handlers.go"
 	createdByAgent := "agent-xyz"
 	projectABC := "project-abc"
+	embeddingText := "[0.3,0.4]"
 	createdAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	updatedAt := createdAt.Add(24 * time.Hour)
 	lastReviewAt := createdAt.Add(48 * time.Hour)
@@ -103,7 +103,7 @@ func TestScanChunkSearchRow(t *testing.T) {
 		"auth-flow",
 		"JWT middleware",
 		encodeContent("Validates bearer tokens"),
-		pgvector.NewVector([]float32{0.3, 0.4}),
+		&embeddingText,
 		&sourceFile,
 		[]byte(`[10,20]`),
 		encodeStringSlice([]string{"token expires"}),
@@ -335,6 +335,7 @@ func TestScanChunkResultRow(t *testing.T) {
 	sourceFile := "internal/mcp/tools.go"
 	createdByAgent := "agent-123"
 	projectXYZ := "project-xyz"
+	embeddingText := "[0.1,0.2]"
 	createdAt := time.Date(2026, time.March, 11, 9, 30, 0, 0, time.UTC)
 	updatedAt := createdAt.Add(30 * time.Minute)
 
@@ -344,7 +345,7 @@ func TestScanChunkResultRow(t *testing.T) {
 		"search-key",
 		"Search chunk",
 		encodeContent("Compaction candidate"),
-		pgvector.NewVector([]float32{0.1, 0.2}),
+		&embeddingText,
 		&sourceFile,
 		[]byte(`[9,21]`),
 		encodeStringSlice([]string{"Keep version metadata"}),
@@ -395,8 +396,6 @@ func (s stubScanner) Scan(dest ...interface{}) error {
 			*d = s.values[i].(*string)
 		case *[]byte:
 			*d = append([]byte(nil), s.values[i].([]byte)...)
-		case *pgvector.Vector:
-			*d = s.values[i].(pgvector.Vector)
 		case *time.Time:
 			*d = s.values[i].(time.Time)
 		case *int:
