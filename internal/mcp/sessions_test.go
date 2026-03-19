@@ -99,7 +99,11 @@ func TestEndSessionResult_Fields(t *testing.T) {
 // Integration-style tests would require a live DB or pgxmock.
 // Unit tests above cover config parsing and struct integrity.
 // DB-dependent tests (StartSession, ResumeSession, EndSession, RegisterFocus)
-// are covered by the integration test suite in internal/mcp/integration_test.go.
+// are covered by the integration test suite.
+//
+// Session activity counter tests (incrementSessionActivity) require a live
+// DB to verify chunks_written/chunks_read increment correctly after
+// write/read tool calls. Run via: go test ./internal/mcp/... -tags=integration
 func TestInjectedChunkOrder(t *testing.T) {
 	t.Parallel()
 	// Verify scope ordering constants: AGENT=1, ORG=2, PROJECT=3

@@ -672,11 +672,19 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
 		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.WriteContext(ctx, projectID, in)
+		result, err := s.tools.WriteContext(ctx, projectID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "write_identity":
 		var in WriteIdentityInput
@@ -690,7 +698,11 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if scope.AgentID != nil {
 			in.AgentID = *scope.AgentID
 		}
-		return s.tools.WriteIdentity(ctx, in)
+		result, err := s.tools.WriteIdentity(ctx, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "write_memory":
 		var in WriteMemoryInput
@@ -704,29 +716,49 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if scope.AgentID != nil {
 			in.AgentID = *scope.AgentID
 		}
-		return s.tools.WriteMemory(ctx, in)
+		result, err := s.tools.WriteMemory(ctx, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "write_knowledge":
 		var in WriteKnowledgeInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
 		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.WriteKnowledge(ctx, projectID, in)
+		result, err := s.tools.WriteKnowledge(ctx, projectID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "write_convention":
 		var in WriteConventionInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
 		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.WriteConvention(ctx, projectID, in)
+		result, err := s.tools.WriteConvention(ctx, projectID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "write_org_knowledge":
 		var in WriteOrgKnowledgeInput
@@ -737,7 +769,11 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.WriteOrgKnowledge(ctx, scope.OrgID, in)
+		result, err := s.tools.WriteOrgKnowledge(ctx, scope.OrgID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "store_principle":
 		var in StorePrincipleInput
@@ -748,29 +784,41 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.StorePrinciple(ctx, scope.OrgID, in)
+		result, err := s.tools.StorePrinciple(ctx, scope.OrgID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "write_chunk":
 		var in WriteChunkInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
 		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.WriteChunk(ctx, projectID, in)
+		result, err := s.tools.WriteChunk(ctx, projectID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "search_context":
 		var in SearchContextInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
-		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
+		scope, err := s.loadAPIKeyScope(ctx, r)
 		if err != nil {
 			return nil, err
 		}
-		scope, err := s.loadAPIKeyScope(ctx, r)
+		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -780,29 +828,49 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if in.OrgID == "" && scope.OrgID != "" {
 			in.OrgID = scope.OrgID
 		}
-		return s.tools.SearchContext(ctx, projectID, in, scope.SearchFilters)
+		result, err := s.tools.SearchContext(ctx, projectID, in, scope.SearchFilters)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, false)
+		}
+		return result, err
 
 	case "read_context":
 		var in ReadContextInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
 		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.ReadContext(ctx, projectID, in)
+		result, err := s.tools.ReadContext(ctx, projectID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, false)
+		}
+		return result, err
 
 	case "update_context":
 		var in UpdateContextInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
 		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
 		if err != nil {
 			return nil, err
 		}
-		return s.tools.UpdateContext(ctx, projectID, in)
+		result, err := s.tools.UpdateContext(ctx, projectID, in)
+		if err == nil && scope.AgentID != nil {
+			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
+		}
+		return result, err
 
 	case "get_context_versions":
 		var in GetVersionsInput

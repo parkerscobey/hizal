@@ -241,6 +241,24 @@ func (t *Tools) fetchAlwaysInjectChunks(
 	return chunks, truncated, nil
 }
 
+func (t *Tools) incrementSessionActivity(agentID, orgID string, isWrite bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	col := "chunks_read"
+	if isWrite {
+		col = "chunks_written"
+	}
+
+	_, _ = t.pool.Exec(ctx, fmt.Sprintf(`
+		UPDATE sessions
+		SET %s = %s + 1, updated_at = NOW()
+		WHERE org_id = $1
+		  AND status = 'active'
+		  AND agent_id = (SELECT id FROM agents WHERE id = $2 LIMIT 1)
+	`, col, col), orgID, agentID)
+}
+
 // ---- Tool Implementations ----
 
 // StartSession begins a new session for an agent.
