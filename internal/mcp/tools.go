@@ -137,7 +137,7 @@ type WriteContextInput struct {
 	OrgID       string   `json:"org_id,omitempty"`
 	// AlwaysInject: true = ambient baseline, false = on-demand. Defaults to false.
 	AlwaysInject bool   `json:"always_inject,omitempty"`
-	// ChunkType: KNOWLEDGE | RESEARCH | PLAN | DECISION. Defaults to KNOWLEDGE.
+	// ChunkType: IDENTITY | MEMORY | KNOWLEDGE | CONVENTION | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON. Defaults to KNOWLEDGE. Must be a valid type for the org (global or org-specific).
 	ChunkType   string   `json:"chunk_type,omitempty"`
 	QueryKey    string   `json:"query_key"`
 	Title       string   `json:"title"`
@@ -355,6 +355,18 @@ func getVersion(ctx context.Context, pool *pgxpool.Pool, chunkID string) (int, e
 	return v, err
 }
 
+func isValidChunkType(ctx context.Context, pool *pgxpool.Pool, orgID string, chunkType string) (bool, error) {
+	var count int
+	err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM chunk_types
+		WHERE slug = $1 AND (org_id IS NULL OR org_id = $2)
+	`, chunkType, orgID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // ---- Tool Implementations ----
 
 func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteContextInput) (*WriteContextResult, error) {
@@ -405,6 +417,17 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	chunkType := in.ChunkType
 	if chunkType == "" {
 		chunkType = "KNOWLEDGE"
+	}
+
+	// Validate chunk_type against chunk_types table
+	var orgID string
+	pool(t).QueryRow(ctx, `SELECT org_id FROM projects WHERE id = $1`, projectID).Scan(&orgID)
+	valid, err := isValidChunkType(ctx, pool(t), orgID, chunkType)
+	if err != nil {
+		return nil, fmt.Errorf("chunk_type validation failed: %w", err)
+	}
+	if !valid {
+		return nil, fmt.Errorf("INVALID_CHUNK_TYPE: %q is not a valid chunk type for this org", chunkType)
 	}
 
 	contentJSON := encodeContent(in.Content)
