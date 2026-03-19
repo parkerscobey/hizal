@@ -1289,9 +1289,9 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, $1, NULL, $2, $3, 'KNOWLEDGE', $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES (NULL, 'ORG', NULL, $1, $2, 'KNOWLEDGE', $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at
-	`, defaults.DefaultScope, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1309,7 +1309,7 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        defaults.DefaultScope,
+		Scope:        "ORG",
 		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
@@ -1354,9 +1354,9 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
 		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, $1, NULL, $2, $3, 'PRINCIPLE', $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES (NULL, 'ORG', NULL, $1, $2, 'PRINCIPLE', $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at
-	`, defaults.DefaultScope, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1374,7 +1374,7 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 
 	return &WriteContextResult{
 		ID:           id,
-		Scope:        defaults.DefaultScope,
+		Scope:        "ORG",
 		AlwaysInject: defaults.DefaultAlwaysInject,
 		ChunkType:    "PRINCIPLE",
 		QueryKey:     in.QueryKey,
