@@ -109,6 +109,30 @@ GET    /health                # health check
 
 ---
 
+## How We Use It (and How You Might)
+
+Winnow handles memory and context. It doesn't replace your task tracker or your orchestrator — it works alongside them.
+
+**Our setup at XferOps:**
+
+1. A long-running orchestrator agent (OpenClaw) receives a task from a human via Telegram
+2. The orchestrator looks up the spec in Forge (our project management tool) and passes the ticket ID to a dev agent (OpenCode)
+3. The dev agent starts a Winnow session, reads the Forge ticket, searches Winnow for relevant context, then implements and opens a PR
+4. At the end of the session, the dev agent calls `end_session` — Winnow returns the MEMORY chunks written during the session for review and promotion
+
+**The specification layer is deliberately generic.** Winnow doesn't care where your task spec comes from:
+
+| Source | How it works |
+|--------|-------------|
+| **Forge / Linear / Jira** | Orchestrator or human passes a ticket ID; agent reads spec via MCP or API |
+| **Orchestrator prompt** | Orchestrator writes a detailed prompt directly; agent extracts task and search hints from it |
+| **Winnow chunk** | Orchestrator writes a KNOWLEDGE or DECISION chunk as the spec; agent searches for it by query key |
+| **Plain file** | A spec.md or similar; works fine, though it trades Winnow's persistence for simplicity |
+
+The pattern is always the same: **Winnow provides memory and context; something else provides the task definition.** See [`AGENTS.md`](./AGENTS.md) for how we structure the dev agent workflow.
+
+---
+
 ## Core Concepts
 
 **Context Chunk** — A small, composable unit of knowledge. Has a title, content, source location, gotchas, and related chunk IDs.
