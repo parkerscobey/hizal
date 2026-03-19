@@ -8,8 +8,8 @@ This file tells you how to work here. Read it fully before doing anything else.
 ## Your First Three Steps (always, no exceptions)
 
 1. **Start a Winnow session**
-2. **Search Winnow for existing context** on the task
-3. **Read the Forge ticket**
+2. **Read the task spec (from Forge)**
+3. **Search Winnow for existing context on the task**
 
 Only then start writing code.
 
@@ -40,33 +40,33 @@ winnow_register_focus(
 
 ---
 
-## 2. Search Winnow Before You Touch Code
+## 2. Read the Task Spec
 
-Before reading any source files, search for existing context on your task:
-
-```
-winnow_search_context(
-  query="<topic of the ticket>",
-  project_id="1651f741-6127-4653-9486-149d16028277"
-)
-```
-
-Run 2-3 searches with different phrasings. Read the returned chunks — they contain
-architecture decisions, conventions, and prior design work that must inform your implementation.
-Don't rediscover what the team already decided.
-
----
-
-## 3. Read the Forge Ticket
-
-Use the forge MCP to pull the ticket spec:
+**In our setup**, specs come from Forge (our project management tool) via the forge MCP:
 
 ```
 forge_get_task(taskId="<ticket-id>")
 ```
 
-The ticket description is the spec. If anything is ambiguous, the Winnow context you already
-searched should resolve it. If still ambiguous, note it in a PR comment — don't guess.
+The ticket description is the spec. Read it fully. Extract the key concepts and decisions
+before moving to step 3.
+
+---
+
+## 3. Search Winnow for Existing Context
+
+Now that you know what you're building, search for prior decisions and conventions:
+
+```
+winnow_search_context(
+  query="<key concept from the spec>",
+  project_id="1651f741-6127-4653-9486-149d16028277"
+)
+```
+
+Run searches. Read the returned chunks — they contain architecture decisions, conventions,
+and prior design work that must inform your implementation.
+Don't rediscover what the team already decided.
 
 ---
 
@@ -82,17 +82,17 @@ Always branch from `main`. Pull latest before branching.
 
 ### Stack
 - **Go 1.23** — API server (`internal/`)
-- **PostgreSQL** — migrations in `internal/db/migrations/` (sequential numbering: `NNN_name.up.sql` / `NNN_name.down.sql`)
+- **PostgreSQL** — migrations in `internal/db/migrations/` (sequential: `NNN_name.up.sql` / `NNN_name.down.sql`)
 - **React/Vite/TypeScript** — frontend (`winnow-ui/` repo, separate)
 - **pgvector** — embeddings on `context_chunks`
 
-### Conventions (always check Winnow for current state)
-- All API handlers go in `internal/api/`
+### Conventions
+- All API handlers in `internal/api/`
 - Models in `internal/models/models.go`
 - MCP tools in `internal/mcp/`
 - New routes wired in `internal/api/router.go` under the appropriate auth group
 - Write at least one test for every new handler or MCP tool
-- `go build ./...` and `go test ./...` must be green before you open a PR
+- `go build ./...` and `go test ./...` must be green before opening a PR
 
 ### Build check
 ```bash
@@ -140,31 +140,25 @@ gh pr create \
   --title "feat(<ticket-id-lowercase>): <description>" \
   --body "## Summary\n\n<what you built>\n\n## Testing\n\n<what you ran>\n\n## Migration Impact\n\n<if any>"
 
-gh pr edit --add-reviewer parker-xferops,quinn-xferops-ai,marcus-xferops-ai
+gh pr edit --add-reviewer parker-xferops,adam-xferops-ai
 ```
 
-Always request review from `parker-xferops`. Always.
+Always request review from `parker-xferops`.
 
-Then update the Forge ticket with the PR link:
-```
-forge_update_task(taskId="<ticket-id>", description="<existing description>\n\n---\n**PR:** <url>")
-forge_move_task(taskId="<ticket-id>", columnId="<code-review-column-id>")
-```
-
-Code Review column ID: `cmmhg1y1f0006le01...` — get current column IDs with `forge_get_project(projectId=cmmhg1y1f0001le01gkx2a3sk)` if unsure.
+Then update the Forge ticket with the PR link and move it to Code Review.
 
 ---
 
 ## End Your Session
 
-When the PR is open and the ticket is updated:
+When the PR is open:
 
 ```
 winnow_end_session(session_id="<session_id>")
 ```
 
 Review the returned MEMORY chunks. For each one, decide:
-- **Keep** — useful, leave it
+- **Keep** — useful, leave it as-is
 - **Promote** — elevate to PROJECT KNOWLEDGE (call `winnow_write_knowledge` with the content)
 - **Discard** — noise, ignore it
 
@@ -185,5 +179,5 @@ This is how institutional knowledge compounds across agents and sessions.
 ## The Principle
 
 The prompt that kicked off your session is just a door opener.
-Everything else — the spec, the conventions, the prior decisions — lives in Forge and Winnow.
+Everything else — the spec, the conventions, the prior decisions — lives in the task tracker and Winnow.
 Read those first. Code second.
