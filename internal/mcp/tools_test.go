@@ -841,3 +841,93 @@ func TestExcludeQueryKeyPrefixesClause(t *testing.T) {
 		}
 	})
 }
+
+func TestScopeFilter(t *testing.T) {
+	t.Parallel()
+
+	projID := "aaaaaaaa-1111-2222-3333-444444444444"
+	agentID := "bbbbbbbb-1111-2222-3333-444444444444"
+	orgID := "cccccccc-1111-2222-3333-444444444444"
+
+	t.Run("PROJECT named scope indexes correctly", func(t *testing.T) {
+		t.Parallel()
+		args := []interface{}{"vector"}
+		clause, args := scopeFilter("PROJECT", projID, agentID, orgID, args)
+		// projectID should be $2 (args[1])
+		if args[1] != projID {
+			t.Errorf("args[1] = %v, want %v", args[1], projID)
+		}
+		want := "AND cc.scope = 'PROJECT' AND cc.project_id = $2"
+		if clause != want {
+			t.Errorf("clause = %q, want %q", clause, want)
+		}
+	})
+
+	t.Run("AGENT named scope indexes correctly", func(t *testing.T) {
+		t.Parallel()
+		args := []interface{}{"vector"}
+		clause, args := scopeFilter("AGENT", projID, agentID, orgID, args)
+		if args[1] != agentID {
+			t.Errorf("args[1] = %v, want %v", args[1], agentID)
+		}
+		want := "AND cc.scope = 'AGENT' AND cc.agent_id = $2"
+		if clause != want {
+			t.Errorf("clause = %q, want %q", clause, want)
+		}
+	})
+
+	t.Run("ORG named scope indexes correctly", func(t *testing.T) {
+		t.Parallel()
+		args := []interface{}{"vector"}
+		clause, args := scopeFilter("ORG", projID, agentID, orgID, args)
+		if args[1] != orgID {
+			t.Errorf("args[1] = %v, want %v", args[1], orgID)
+		}
+		want := "AND cc.scope = 'ORG' AND cc.org_id = $2"
+		if clause != want {
+			t.Errorf("clause = %q, want %q", clause, want)
+		}
+	})
+
+	t.Run("default scope with all IDs", func(t *testing.T) {
+		t.Parallel()
+		args := []interface{}{"vector"}
+		clause, args := scopeFilter("", projID, agentID, orgID, args)
+		// Should have 4 args: vector + 3 IDs
+		if len(args) != 4 {
+			t.Fatalf("len(args) = %d, want 4", len(args))
+		}
+		if args[1] != projID {
+			t.Errorf("args[1] = %v, want %v", args[1], projID)
+		}
+		if args[2] != agentID {
+			t.Errorf("args[2] = %v, want %v", args[2], agentID)
+		}
+		if args[3] != orgID {
+			t.Errorf("args[3] = %v, want %v", args[3], orgID)
+		}
+		wantClause := "AND ((cc.scope = 'PROJECT' AND cc.project_id = $2) OR (cc.scope = 'AGENT' AND cc.agent_id = $3) OR (cc.scope = 'ORG' AND cc.org_id = $4))"
+		if clause != wantClause {
+			t.Errorf("clause = %q, want %q", clause, wantClause)
+		}
+	})
+
+	t.Run("AGENT scope then LIMIT is next arg", func(t *testing.T) {
+		// Regression test for WNW-83: LIMIT was getting UUID arg because
+		// idx() returned len(args)+1 instead of len(args) after append.
+		t.Parallel()
+		args := []interface{}{"vector"}
+		_, args = scopeFilter("AGENT", projID, agentID, orgID, args)
+		// Append limit like SearchContext does
+		limit := 10
+		args = append(args, limit)
+		limIdx := len(args)
+		// limit should be at $3 (vector=$1, agentID=$2, limit=$3)
+		if limIdx != 3 {
+			t.Errorf("limIdx = %d, want 3", limIdx)
+		}
+		if args[limIdx-1] != 10 {
+			t.Errorf("args[limIdx-1] = %v (%T), want 10 (int)", args[limIdx-1], args[limIdx-1])
+		}
+	})
+}

@@ -1535,7 +1535,7 @@ func joinClauses(clauses []string) string {
 // If scope is empty, all accessible chunks across all scopes are returned.
 // Returns the clause fragment (starting with "AND") and the updated args slice.
 func scopeFilter(scope, projectID, agentID, orgID string, args []interface{}) (string, []interface{}) {
-	idx := func() int { return len(args) + 1 }
+	idx := func() int { return len(args) }
 
 	switch scope {
 	case "PROJECT":
@@ -1564,7 +1564,6 @@ func scopeFilter(scope, projectID, agentID, orgID string, args []interface{}) (s
 		// Access rules: PROJECT chunks visible if project_id matches,
 		// AGENT chunks visible if agent_id matches,
 		// ORG chunks visible if org_id matches.
-		clauses := []string{"AND ("}
 		sub := []string{}
 		if projectID != "" {
 			args = append(args, projectID)
@@ -1582,7 +1581,6 @@ func scopeFilter(scope, projectID, agentID, orgID string, args []interface{}) (s
 			// No scope context at all — fall back to project_id on chunk (legacy)
 			return "", args
 		}
-		_ = clauses
 		clause := "AND (" + strings.Join(sub, " OR ") + ")"
 		return clause, args
 	}
