@@ -11,7 +11,7 @@
 
 AI coding agents forget everything between sessions. Every new conversation starts from zero — re-reading codebases, violating conventions they followed yesterday, repeating mistakes they already learned from.
 
-Bigger context windows don't fix this. They make it worse. Past ~40% context utilization, model quality degrades — the "dumb zone." The answer isn't more context. It's **better context**, managed deliberately.
+Bigger context windows don't fix this. More room to forget isn't memory. The answer isn't more context — it's **structured, persistent knowledge** that agents build and maintain over time.
 
 ## What Winnow Does
 
@@ -22,7 +22,7 @@ Winnow stores structured context chunks with semantic search, versioning, and sc
 | Agent re-reads the codebase every session | Agent searches existing knowledge in seconds |
 | Conventions violated repeatedly | Conventions always in context (`always_inject`) |
 | Identity drifts between sessions | Identity persists via `write_identity` |
-| Context window fills with noise | Compaction keeps agents in the smart zone |
+| Knowledge scattered across sessions | Structured chunks with semantic search |
 | Each session starts from zero | Each session builds on all previous sessions |
 
 ---
@@ -134,7 +134,7 @@ Types are metadata — Winnow labels chunks, it doesn't enforce state machines.
 
 ### Compaction
 
-When context gets noisy, `compact_context` fetches related chunks so the agent can synthesize them into a single, higher-signal chunk. Stays in the smart zone.
+Over time, overlapping or redundant chunks accumulate. `compact_context` fetches related chunks so the agent can merge them into a single, cleaner chunk — housekeeping, not a workflow.
 
 ---
 
