@@ -28,6 +28,75 @@ const (
 	FreshnessMin            float64 = 0.7 // floor multiplier (max 30% penalty)
 )
 
+// ---- Input types for purpose-built write tools ----
+
+type WriteIdentityInput struct {
+	AgentID      string `json:"agent_id"`
+	QueryKey     string `json:"query_key"`
+	Title        string `json:"title"`
+	Content      string `json:"content"`
+	SourceFile   string `json:"source_file,omitempty"`
+	SourceLines  [2]int `json:"source_lines,omitempty"`
+	Gotchas      []string `json:"gotchas,omitempty"`
+	Related      []string `json:"related,omitempty"`
+}
+
+type WriteMemoryInput struct {
+	AgentID      string   `json:"agent_id"`
+	QueryKey     string   `json:"query_key"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	SourceFile   string   `json:"source_file,omitempty"`
+	SourceLines  [2]int   `json:"source_lines,omitempty"`
+	Gotchas      []string `json:"gotchas,omitempty"`
+	Related      []string `json:"related,omitempty"`
+}
+
+type WriteKnowledgeInput struct {
+	ProjectID    string   `json:"project_id"`
+	QueryKey     string   `json:"query_key"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	SourceFile   string   `json:"source_file,omitempty"`
+	SourceLines  [2]int   `json:"source_lines,omitempty"`
+	Gotchas      []string `json:"gotchas,omitempty"`
+	Related      []string `json:"related,omitempty"`
+}
+
+type WriteConventionInput struct {
+	ProjectID    string   `json:"project_id"`
+	QueryKey     string   `json:"query_key"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	SourceFile   string   `json:"source_file,omitempty"`
+	SourceLines  [2]int   `json:"source_lines,omitempty"`
+	Gotchas      []string `json:"gotchas,omitempty"`
+	Related      []string `json:"related,omitempty"`
+}
+
+type WriteOrgKnowledgeInput struct {
+	OrgID        string   `json:"org_id"`
+	QueryKey     string   `json:"query_key"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	SourceFile   string   `json:"source_file,omitempty"`
+	SourceLines  [2]int   `json:"source_lines,omitempty"`
+	Gotchas      []string `json:"gotchas,omitempty"`
+	Related      []string `json:"related,omitempty"`
+}
+
+type StorePrincipleInput struct {
+	OrgID              string   `json:"org_id"`
+	QueryKey           string   `json:"query_key"`
+	Title              string   `json:"title"`
+	Content            string   `json:"content"`
+	PromotedByUserID   string   `json:"promoted_by_user_id"`
+	SourceFile         string   `json:"source_file,omitempty"`
+	SourceLines        [2]int   `json:"source_lines,omitempty"`
+	Gotchas            []string `json:"gotchas,omitempty"`
+	Related            []string `json:"related,omitempty"`
+}
+
 // computeFreshness returns a score multiplier in [FreshnessMin, 1.0] based on
 // how recently the chunk was active. lastActivity should be the most recent of
 // updated_at and the latest review created_at for the chunk.
@@ -835,6 +904,348 @@ func (t *Tools) fetchStaleSignals(ctx context.Context, chunkIDs []string) (map[s
 		}
 	}
 	return result, rows.Err()
+}
+
+// ---- Purpose-Built Write Tools ----
+
+// WriteIdentity stores an IDENTITY chunk scoped to an agent (always_inject=true).
+func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*WriteContextResult, error) {
+	if in.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, 'AGENT', $1, NULL, true, 'IDENTITY', $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, created_at
+	`, in.AgentID, in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        "AGENT",
+		AlwaysInject: true,
+		ChunkType:    "IDENTITY",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
+}
+
+// WriteMemory stores a MEMORY chunk scoped to an agent (always_inject=false).
+func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteContextResult, error) {
+	if in.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, 'AGENT', $1, NULL, false, 'MEMORY', $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, created_at
+	`, in.AgentID, in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        "AGENT",
+		AlwaysInject: false,
+		ChunkType:    "MEMORY",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
+}
+
+// WriteKnowledge stores a KNOWLEDGE chunk scoped to a project (always_inject=false).
+func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKnowledgeInput) (*WriteContextResult, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project_id is required")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	// Check project is not locked (downgraded)
+	var lockedAt *time.Time
+	if err := pool(t).QueryRow(ctx, `SELECT locked_at FROM projects WHERE id = $1`, projectID).Scan(&lockedAt); err == nil && lockedAt != nil {
+		return nil, fmt.Errorf("PROJECT_LOCKED: this project is read-only — upgrade to Pro to unlock it")
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, 'PROJECT', NULL, NULL, false, 'KNOWLEDGE', $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, created_at
+	`, projectID, in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        "PROJECT",
+		AlwaysInject: false,
+		ChunkType:    "KNOWLEDGE",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
+}
+
+// WriteConvention stores a CONVENTION chunk scoped to a project (always_inject=true).
+func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteConventionInput) (*WriteContextResult, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project_id is required")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	// Check project is not locked (downgraded)
+	var lockedAt *time.Time
+	if err := pool(t).QueryRow(ctx, `SELECT locked_at FROM projects WHERE id = $1`, projectID).Scan(&lockedAt); err == nil && lockedAt != nil {
+		return nil, fmt.Errorf("PROJECT_LOCKED: this project is read-only — upgrade to Pro to unlock it")
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, 'PROJECT', NULL, NULL, true, 'CONVENTION', $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, created_at
+	`, projectID, in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        "PROJECT",
+		AlwaysInject: true,
+		ChunkType:    "CONVENTION",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
+}
+
+// WriteOrgKnowledge stores a KNOWLEDGE chunk scoped to an org (always_inject=false).
+func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrgKnowledgeInput) (*WriteContextResult, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("org_id is required")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, 'ORG', NULL, $1, false, 'KNOWLEDGE', $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, created_at
+	`, orgID, in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        "ORG",
+		AlwaysInject: false,
+		ChunkType:    "KNOWLEDGE",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
+}
+
+// StorePrinciple stores a PRINCIPLE chunk scoped to an org (always_inject=true).
+// Requires promoted_by_user_id to enforce human promotion.
+func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrincipleInput) (*WriteContextResult, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("org_id is required")
+	}
+	if in.QueryKey == "" || in.Title == "" || in.Content == "" {
+		return nil, fmt.Errorf("query_key, title, and content are required")
+	}
+	if in.PromotedByUserID == "" {
+		return nil, fmt.Errorf("store_principle requires human promotion — use write_org_knowledge to propose, then a human promotes via the API.")
+	}
+
+	emb, err := t.embed.Embed(ctx, in.Content)
+	if err != nil {
+		log.Printf("embedding failed: %v", err)
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
+	}
+
+	contentJSON := encodeContent(in.Content)
+	gotchasJSON := encodeStringSlice(in.Gotchas)
+	relatedJSON := encodeStringSlice(in.Related)
+	sourceLinesJSON := encodeSourceLines(in.SourceLines)
+	vec := pgvector.NewVector(emb)
+
+	var id string
+	var createdAt time.Time
+	err = pool(t).QueryRow(ctx, `
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, 'ORG', NULL, $1, true, 'PRINCIPLE', $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, created_at
+	`, orgID, in.QueryKey, in.Title, contentJSON, vec,
+		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
+		Scan(&id, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("insert chunk: %w", err)
+	}
+
+	// Insert initial version
+	_, err = pool(t).Exec(ctx, `
+		INSERT INTO context_versions (chunk_id, version, content, change_note)
+		VALUES ($1, 1, $2, 'Initial')
+	`, id, contentJSON)
+	if err != nil {
+		return nil, fmt.Errorf("insert initial version: %w", err)
+	}
+
+	return &WriteContextResult{
+		ID:           id,
+		Scope:        "ORG",
+		AlwaysInject: true,
+		ChunkType:    "PRINCIPLE",
+		QueryKey:     in.QueryKey,
+		Title:        in.Title,
+		CreatedAt:    createdAt,
+	}, nil
 }
 
 // ---- Helpers ----

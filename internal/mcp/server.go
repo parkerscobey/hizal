@@ -81,7 +81,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_context",
-		Description: "Store a context chunk with embedding for later retrieval.",
+		Description: "Store a context chunk with embedding for later retrieval. DEPRECATED: Use purpose-built tools (write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle) instead.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -95,6 +95,115 @@ var toolList = []toolSchema{
 				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
 			},
 			"required": []string{"project_id", "query_key", "title", "content"},
+		},
+	},
+	{
+		Name:        "write_identity",
+		Description: "Store an IDENTITY chunk scoped to an agent (always_inject=true). Use to define agent identity, personality, and core traits.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"agent_id":     map[string]interface{}{"type": "string", "description": "Agent UUID this identity applies to"},
+				"query_key":    map[string]interface{}{"type": "string", "description": "Unique key for this identity topic"},
+				"title":        map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":      map[string]interface{}{"type": "string", "description": "Identity content"},
+				"source_file":  map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"agent_id", "query_key", "title", "content"},
+		},
+	},
+	{
+		Name:        "write_memory",
+		Description: "Store a MEMORY chunk scoped to an agent (always_inject=false). Use for episodic context, conversation history, or task-specific memory.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"agent_id":     map[string]interface{}{"type": "string", "description": "Agent UUID this memory applies to"},
+				"query_key":    map[string]interface{}{"type": "string", "description": "Unique key for this memory topic"},
+				"title":        map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":      map[string]interface{}{"type": "string", "description": "Memory content"},
+				"source_file":  map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"agent_id", "query_key", "title", "content"},
+		},
+	},
+	{
+		Name:        "write_knowledge",
+		Description: "Store a KNOWLEDGE chunk scoped to a project (always_inject=false). Use for project-specific facts, documentation, and reference material.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"project_id":   map[string]interface{}{"type": "string", "description": "Project UUID to scope this knowledge"},
+				"query_key":    map[string]interface{}{"type": "string", "description": "Unique key for this knowledge topic"},
+				"title":        map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":      map[string]interface{}{"type": "string", "description": "Knowledge content"},
+				"source_file":  map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"project_id", "query_key", "title", "content"},
+		},
+	},
+	{
+		Name:        "write_convention",
+		Description: "Store a CONVENTION chunk scoped to a project (always_inject=true). Use for coding standards, patterns, and project conventions.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"project_id":   map[string]interface{}{"type": "string", "description": "Project UUID to scope this convention"},
+				"query_key":    map[string]interface{}{"type": "string", "description": "Unique key for this convention topic"},
+				"title":        map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":      map[string]interface{}{"type": "string", "description": "Convention content"},
+				"source_file":  map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"project_id", "query_key", "title", "content"},
+		},
+	},
+	{
+		Name:        "write_org_knowledge",
+		Description: "Store a KNOWLEDGE chunk scoped to an org (always_inject=false). Use for organization-wide facts and documentation.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"org_id":       map[string]interface{}{"type": "string", "description": "Org UUID to scope this knowledge"},
+				"query_key":    map[string]interface{}{"type": "string", "description": "Unique key for this knowledge topic"},
+				"title":        map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":      map[string]interface{}{"type": "string", "description": "Knowledge content"},
+				"source_file":  map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"org_id", "query_key", "title", "content"},
+		},
+	},
+	{
+		Name:        "store_principle",
+		Description: "Store a PRINCIPLE chunk scoped to an org (always_inject=true). Requires promoted_by_user_id to enforce human promotion. Use for fundamental principles that agents must follow.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"org_id":         map[string]interface{}{"type": "string", "description": "Org UUID to scope this principle"},
+				"query_key":      map[string]interface{}{"type": "string", "description": "Unique key for this principle topic"},
+				"title":          map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":        map[string]interface{}{"type": "string", "description": "Principle content"},
+				"promoted_by_user_id": map[string]interface{}{"type": "string", "description": "User ID of the human who promoted this principle (required)"},
+				"source_file":    map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+			},
+			"required": []string{"org_id", "query_key", "title", "content", "promoted_by_user_id"},
 		},
 	},
 	{
@@ -424,6 +533,64 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 			return nil, err
 		}
 		return s.tools.WriteContext(ctx, projectID, in)
+
+	case "write_identity":
+		var in WriteIdentityInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		return s.tools.WriteIdentity(ctx, in)
+
+	case "write_memory":
+		var in WriteMemoryInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		return s.tools.WriteMemory(ctx, in)
+
+	case "write_knowledge":
+		var in WriteKnowledgeInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.WriteKnowledge(ctx, projectID, in)
+
+	case "write_convention":
+		var in WriteConventionInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		projectID, err := s.resolveProjectID(ctx, r, headerProjectID, in.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.WriteConvention(ctx, projectID, in)
+
+	case "write_org_knowledge":
+		var in WriteOrgKnowledgeInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.WriteOrgKnowledge(ctx, scope.OrgID, in)
+
+	case "store_principle":
+		var in StorePrincipleInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		return s.tools.StorePrinciple(ctx, scope.OrgID, in)
 
 	case "search_context":
 		var in SearchContextInput

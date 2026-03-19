@@ -87,7 +87,7 @@ func (t *Tools) resolveLifecycle(ctx context.Context, orgID string, slug string)
 
 	// Try org-specific first, then global preset.
 	row := t.pool.QueryRow(ctx, `
-		SELECT id, org_id, name, slug, is_default, config, created_at, updated_at
+		SELECT id, org_id, name, slug, is_default, description, config, created_at, updated_at
 		FROM session_lifecycles
 		WHERE slug = $1 AND (org_id = $2 OR org_id IS NULL)
 		ORDER BY org_id NULLS LAST
@@ -95,7 +95,7 @@ func (t *Tools) resolveLifecycle(ctx context.Context, orgID string, slug string)
 	`, slug, orgID)
 
 	lc := &models.SessionLifecycle{}
-	err := row.Scan(&lc.ID, &lc.OrgID, &lc.Name, &lc.Slug, &lc.IsDefault, &lc.Config, &lc.CreatedAt, &lc.UpdatedAt)
+	err := row.Scan(&lc.ID, &lc.OrgID, &lc.Name, &lc.Slug, &lc.IsDefault, &lc.Description, &lc.Config, &lc.CreatedAt, &lc.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("lifecycle %q not found", slug)

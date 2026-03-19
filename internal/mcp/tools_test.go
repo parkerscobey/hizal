@@ -406,3 +406,28 @@ func (s stubScanner) Scan(dest ...interface{}) error {
 
 	return nil
 }
+
+func TestStorePrincipleGuardrail(t *testing.T) {
+	t.Parallel()
+
+	// Pool is nil to prove the DB is never touched when guardrail fails
+	tools := &Tools{pool: nil, embed: nil}
+
+	in := StorePrincipleInput{
+		QueryKey:   "principle-1",
+		Title:      "Test Principle",
+		Content:    "This is a test principle",
+		PromotedByUserID: "", // Missing!
+	}
+
+	_, err := tools.StorePrinciple(context.Background(), "org-123", in)
+	if err == nil {
+		t.Fatalf("expected error when promoted_by_user_id is missing, got nil")
+	}
+
+	wantErrMsg := "store_principle requires human promotion"
+	if !strings.Contains(err.Error(), wantErrMsg) {
+		t.Fatalf("error = %q, want to contain %q", err.Error(), wantErrMsg)
+	}
+}
+
