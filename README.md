@@ -101,6 +101,31 @@ Every chunk has a `chunk_type` that describes its content and determines how it'
 
 Orgs can register custom chunk types with their own consolidation behavior.
 
+### Sessions
+
+Sessions are first-class objects in Winnow, not an afterthought. They track the full arc of an agent's work:
+
+```
+start_session(lifecycle_slug="dev")
+  │
+  ├─ Identity, conventions, and principles injected automatically
+  ├─ register_focus(task="WNW-42: billing webhooks", project_id="...")
+  │
+  ├─ During work:
+  │   ├─ search_context → find existing knowledge
+  │   ├─ write_knowledge → share project facts
+  │   └─ write_memory → record personal observations
+  │
+  └─ end_session(session_id="...")
+       └─ Returns MEMORY/RESEARCH/PLAN chunks for review and promotion
+```
+
+`start_session` does the heavy lifting: it looks up the agent's type, selects the right lifecycle preset, and deterministically injects all relevant always_inject chunks (identity, conventions, principles) before the agent writes a single line of code. `end_session` surfaces ephemeral chunks so they can be curated into durable knowledge.
+
+Sessions also track metrics — chunks read, chunks written, resume count — so you can see how agents actually use context over time.
+
+**See [`AGENTS.md`](./AGENTS.md) for a complete example** of how a dev agent session works end-to-end: start session → read spec → search context → write code → open PR → update spec → end session.
+
 ---
 
 ## Quickstart
