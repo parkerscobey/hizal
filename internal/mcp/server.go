@@ -114,7 +114,7 @@ var toolList = []toolSchema{
 				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
 				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
 			},
-			"required": []string{"agent_id", "query_key", "title", "content"},
+			"required": []string{"query_key", "title", "content"},
 		},
 	},
 	{
@@ -123,7 +123,7 @@ var toolList = []toolSchema{
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"agent_id":     map[string]interface{}{"type": "string", "description": "Agent UUID this memory applies to"},
+				"agent_id":     map[string]interface{}{"type": "string", "description": "Agent UUID this identity applies to"},
 				"query_key":    map[string]interface{}{"type": "string", "description": "Unique key for this memory topic"},
 				"title":        map[string]interface{}{"type": "string", "description": "Short descriptive title"},
 				"content":      map[string]interface{}{"type": "string", "description": "Memory content"},
@@ -132,7 +132,7 @@ var toolList = []toolSchema{
 				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
 				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
 			},
-			"required": []string{"agent_id", "query_key", "title", "content"},
+			"required": []string{"query_key", "title", "content"},
 		},
 	},
 	{
@@ -683,12 +683,26 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		if scope.AgentID != nil {
+			in.AgentID = *scope.AgentID
+		}
 		return s.tools.WriteIdentity(ctx, in)
 
 	case "write_memory":
 		var in WriteMemoryInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		if scope.AgentID != nil {
+			in.AgentID = *scope.AgentID
 		}
 		return s.tools.WriteMemory(ctx, in)
 
