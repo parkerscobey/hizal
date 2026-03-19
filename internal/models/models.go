@@ -57,24 +57,25 @@ type ProjectMembership struct {
 
 // Agent represents a row in the agents table.
 type Agent struct {
-	ID            string     `json:"id" db:"id"`
-	OrgID         string     `json:"org_id" db:"org_id"`
-	OwnerID       string     `json:"owner_id" db:"owner_id"`
-	Name          string     `json:"name" db:"name"`
-	Slug          string     `json:"slug" db:"slug"`
-	Type          string     `json:"type" db:"type"`
-	Description   *string    `json:"description,omitempty" db:"description"`
-	Status        string     `json:"status" db:"status"`
-	Platform      *string    `json:"platform,omitempty" db:"platform"`
-	InstanceID    *string    `json:"instance_id,omitempty" db:"instance_id"`
-	IPAddress     *string    `json:"ip_address,omitempty" db:"ip_address"`
-	LastActiveAt  *time.Time `json:"last_active_at,omitempty" db:"last_active_at"`
+	ID           string     `json:"id" db:"id"`
+	OrgID        string     `json:"org_id" db:"org_id"`
+	OwnerID      string     `json:"owner_id" db:"owner_id"`
+	Name         string     `json:"name" db:"name"`
+	Slug         string     `json:"slug" db:"slug"`
+	Type         string     `json:"type" db:"type"`
+	Description  *string    `json:"description,omitempty" db:"description"`
+	Status       string     `json:"status" db:"status"`
+	Platform     *string    `json:"platform,omitempty" db:"platform"`
+	InstanceID   *string    `json:"instance_id,omitempty" db:"instance_id"`
+	IPAddress    *string    `json:"ip_address,omitempty" db:"ip_address"`
+	LastActiveAt *time.Time `json:"last_active_at,omitempty" db:"last_active_at"`
+	TypeID       *string    `json:"type_id,omitempty" db:"type_id"`
 	// MemoryEnabled controls whether this agent can read/write AGENT-scoped chunks.
 	// false (default): knowledge-only — PROJECT + ORG scope only.
 	// true:            full behavior-driven — AGENT scope unlocked (Pro tier).
-	MemoryEnabled bool       `json:"memory_enabled" db:"memory_enabled"`
-	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
+	MemoryEnabled bool      `json:"memory_enabled" db:"memory_enabled"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // AgentProject represents a row in the agent_projects table.
@@ -103,31 +104,34 @@ type APIKey struct {
 // ContextChunk represents a row in the context_chunks table.
 //
 // Scope model:
-//   PROJECT (default): shared project knowledge — project_id required.
-//   AGENT:             private agent memory — agent_id required, project_id optional.
-//   ORG:               org-wide memory — org_id required, project_id NULL.
+//
+//	PROJECT (default): shared project knowledge — project_id required.
+//	AGENT:             private agent memory — agent_id required, project_id optional.
+//	ORG:               org-wide memory — org_id required, project_id NULL.
 //
 // AlwaysInject:
-//   false: retrieved on demand via semantic search.
-//   true:  surfaced automatically as ambient baseline layer.
+//
+//	false: retrieved on demand via semantic search.
+//	true:  surfaced automatically as ambient baseline layer.
 //
 // ChunkType:
-//   KNOWLEDGE: facts, architecture, conventions (default)
-//   RESEARCH:  investigation, findings (most disposable during consolidation)
-//   PLAN:      planned work, approaches
-//   DECISION:  made decisions, reasoning
+//
+//	KNOWLEDGE: facts, architecture, conventions (default)
+//	RESEARCH:  investigation, findings (most disposable during consolidation)
+//	PLAN:      planned work, approaches
+//	DECISION:  made decisions, reasoning
 type ContextChunk struct {
-	ID             string          `json:"id" db:"id"`
+	ID string `json:"id" db:"id"`
 	// ProjectID is nullable: NULL for ORG-scoped chunks and cross-project AGENT chunks.
-	ProjectID      *string         `json:"project_id,omitempty" db:"project_id"`
+	ProjectID *string `json:"project_id,omitempty" db:"project_id"`
 	// Scope is PROJECT | AGENT | ORG. Defaults to PROJECT.
-	Scope          string          `json:"scope" db:"scope"`
+	Scope string `json:"scope" db:"scope"`
 	// AgentID is set for AGENT-scoped chunks.
-	AgentID        *string         `json:"agent_id,omitempty" db:"agent_id"`
+	AgentID *string `json:"agent_id,omitempty" db:"agent_id"`
 	// OrgID is set for ORG-scoped chunks.
-	OrgID          *string         `json:"org_id,omitempty" db:"org_id"`
+	OrgID *string `json:"org_id,omitempty" db:"org_id"`
 	// AlwaysInject: true = ambient baseline, false = on-demand search.
-	AlwaysInject   bool            `json:"always_inject" db:"always_inject"`
+	AlwaysInject bool `json:"always_inject" db:"always_inject"`
 	// ChunkType: KNOWLEDGE | RESEARCH | PLAN | DECISION. Defaults to KNOWLEDGE.
 	ChunkType      string          `json:"chunk_type" db:"chunk_type"`
 	QueryKey       string          `json:"query_key" db:"query_key"`
@@ -182,6 +186,29 @@ type UsageSnapshot struct {
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
 
+// AgentTypeFilterConfig represents JSONB filters for inject/search behavior.
+type AgentTypeFilterConfig struct {
+	IncludeScopes     []string `json:"include_scopes,omitempty"`
+	ExcludeScopes     []string `json:"exclude_scopes,omitempty"`
+	IncludeChunkTypes []string `json:"include_chunk_types,omitempty"`
+	ExcludeChunkTypes []string `json:"exclude_chunk_types,omitempty"`
+}
+
+// AgentType represents a row in the agent_types table.
+// org_id = NULL means a global preset.
+type AgentType struct {
+	ID            string                `json:"id" db:"id"`
+	OrgID         *string               `json:"org_id,omitempty" db:"org_id"`
+	Name          string                `json:"name" db:"name"`
+	Slug          string                `json:"slug" db:"slug"`
+	BaseType      *string               `json:"base_type,omitempty" db:"base_type"`
+	Description   *string               `json:"description,omitempty" db:"description"`
+	InjectFilters AgentTypeFilterConfig `json:"inject_filters" db:"inject_filters"`
+	SearchFilters AgentTypeFilterConfig `json:"search_filters" db:"search_filters"`
+	CreatedAt     time.Time             `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time             `json:"updated_at" db:"updated_at"`
+}
+
 // SessionLifecycle represents a row in the session_lifecycles table.
 // org_id = NULL means a global built-in preset (default, dev, admin, orchestrator).
 type SessionLifecycle struct {
@@ -198,29 +225,29 @@ type SessionLifecycle struct {
 
 // SessionLifecycleConfig is the parsed form of SessionLifecycle.Config.
 type SessionLifecycleConfig struct {
-	TTLHours                int      `json:"ttl_hours"`
-	RequiredSteps           []string `json:"required_steps"`
-	ConsolidationThreshold  int      `json:"consolidation_threshold"`
-	InjectScopes            []string `json:"inject_scopes"`
+	TTLHours               int      `json:"ttl_hours"`
+	RequiredSteps          []string `json:"required_steps"`
+	ConsolidationThreshold int      `json:"consolidation_threshold"`
+	InjectScopes           []string `json:"inject_scopes"`
 }
 
 // Session represents a row in the sessions table.
 // One active session per agent is enforced by a partial unique index.
 type Session struct {
-	ID                 string     `json:"id" db:"id"`
-	AgentID            string     `json:"agent_id" db:"agent_id"`
-	ProjectID          *string    `json:"project_id,omitempty" db:"project_id"`
-	OrgID              string     `json:"org_id" db:"org_id"`
-	LifecycleID        *string    `json:"lifecycle_id,omitempty" db:"lifecycle_id"`
-	Status             string     `json:"status" db:"status"` // active | ended | expired
-	FocusTask          *string    `json:"focus_task,omitempty" db:"focus_task"`
-	ChunksWritten      int        `json:"chunks_written" db:"chunks_written"`
-	ChunksRead         int        `json:"chunks_read" db:"chunks_read"`
-	ConsolidationDone  bool       `json:"consolidation_done" db:"consolidation_done"`
-	ResumeCount        int        `json:"resume_count" db:"resume_count"`
-	ExpiresAt          time.Time  `json:"expires_at" db:"expires_at"`
-	StartedAt          time.Time  `json:"started_at" db:"started_at"`
-	EndedAt            *time.Time `json:"ended_at,omitempty" db:"ended_at"`
-	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
+	ID                string     `json:"id" db:"id"`
+	AgentID           string     `json:"agent_id" db:"agent_id"`
+	ProjectID         *string    `json:"project_id,omitempty" db:"project_id"`
+	OrgID             string     `json:"org_id" db:"org_id"`
+	LifecycleID       *string    `json:"lifecycle_id,omitempty" db:"lifecycle_id"`
+	Status            string     `json:"status" db:"status"` // active | ended | expired
+	FocusTask         *string    `json:"focus_task,omitempty" db:"focus_task"`
+	ChunksWritten     int        `json:"chunks_written" db:"chunks_written"`
+	ChunksRead        int        `json:"chunks_read" db:"chunks_read"`
+	ConsolidationDone bool       `json:"consolidation_done" db:"consolidation_done"`
+	ResumeCount       int        `json:"resume_count" db:"resume_count"`
+	ExpiresAt         time.Time  `json:"expires_at" db:"expires_at"`
+	StartedAt         time.Time  `json:"started_at" db:"started_at"`
+	EndedAt           *time.Time `json:"ended_at,omitempty" db:"ended_at"`
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }

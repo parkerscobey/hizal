@@ -53,6 +53,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	if pool != nil && h != nil {
 		sessionH = NewSessionHandlers(mcpServer.Tools(), pool)
 	}
+	agentTypeH := NewAgentTypeHandlers(pool)
 	// Stripe webhook — no JWT auth, verified by Stripe-Signature header
 	r.Post("/v1/webhooks/stripe", billingH.HandleWebhook)
 
@@ -142,6 +143,13 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 		// API keys
 		r.Get("/v1/keys", keyH.ListKeys)
 		r.Delete("/v1/keys/{id}", keyH.DeleteKey)
+
+		// Agent types
+		r.Post("/v1/orgs/{id}/agent-types", agentTypeH.CreateAgentType)
+		r.Get("/v1/orgs/{id}/agent-types", agentTypeH.ListAgentTypes)
+		r.Get("/v1/agent-types/{id}", agentTypeH.GetAgentType)
+		r.Patch("/v1/agent-types/{id}", agentTypeH.UpdateAgentType)
+		r.Delete("/v1/agent-types/{id}", agentTypeH.DeleteAgentType)
 
 		// Sessions
 		if sessionH != nil {

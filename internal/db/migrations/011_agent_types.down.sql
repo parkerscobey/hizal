@@ -1,0 +1,3 @@
+ALTER TABLE agents DROP COLUMN IF EXISTS type_id;
+
+DROP TABLE IF EXISTS agent_types;
