@@ -142,14 +142,42 @@ func ContextAuth(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 			if projectID == "" {
 				projectID = r.Header.Get("X-Project-ID")
 			}
-			if projectID == "" {
-				writeAuthError(w, http.StatusBadRequest, "PROJECT_REQUIRED", "project_id query param or X-Project-ID header is required")
-				return
-			}
 
 			user := JWTUser{ID: jwtClaims.UserID, Email: jwtClaims.Email}
 			ctx := withJWTUser(r.Context(), user)
 			scopedReq := r.WithContext(ctx)
+
+			// Agent-scoped or org-scoped requests may not have a project_id.
+			// Resolve org from the agent or org param instead.
+			if projectID == "" {
+				agentID := r.URL.Query().Get("agent_id")
+				orgID := r.URL.Query().Get("org_id")
+
+				if agentID != "" {
+					// Resolve org from agent
+					err := pool.QueryRow(r.Context(),
+						`SELECT org_id FROM agents WHERE id = $1`, agentID,
+					).Scan(&orgID)
+					if err != nil {
+						writeAuthError(w, http.StatusBadRequest, "INVALID_AGENT", "agent not found")
+						return
+					}
+				}
+
+				if orgID != "" {
+					// Verify caller is a member of this org
+					if _, err := requireOrgRole(scopedReq, pool, orgID, "owner", "admin", "member", "viewer"); err != nil {
+						writeAuthError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+						return
+					}
+					claims := AuthClaims{OrgID: orgID}
+					next.ServeHTTP(w, scopedReq.WithContext(withClaims(ctx, claims)))
+					return
+				}
+
+				writeAuthError(w, http.StatusBadRequest, "PROJECT_REQUIRED", "project_id, agent_id, or org_id is required")
+				return
+			}
 
 			_, orgID, err := requireProjectAccess(scopedReq, pool, projectID)
 			if err != nil {
