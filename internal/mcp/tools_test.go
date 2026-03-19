@@ -570,6 +570,122 @@ func TestApplyTypeFilters(t *testing.T) {
 	})
 }
 
+func TestWriteChunk_Validation(t *testing.T) {
+	t.Parallel()
+
+	tools := &Tools{pool: nil, embed: nil}
+
+	t.Run("missing type returns error", func(t *testing.T) {
+		t.Parallel()
+		in := WriteChunkInput{
+			QueryKey: "test-key",
+			Title:    "Test",
+			Content:  "Test content",
+		}
+		_, err := tools.WriteChunk(context.Background(), "", in)
+		if err == nil {
+			t.Fatalf("expected error for missing type, got nil")
+		}
+		if !strings.Contains(err.Error(), "type is required") {
+			t.Fatalf("error = %q, want to contain 'type is required'", err.Error())
+		}
+	})
+
+	t.Run("missing query_key returns error", func(t *testing.T) {
+		t.Parallel()
+		in := WriteChunkInput{
+			Type:    "KNOWLEDGE",
+			Title:   "Test",
+			Content: "Test content",
+		}
+		_, err := tools.WriteChunk(context.Background(), "", in)
+		if err == nil {
+			t.Fatalf("expected error for missing query_key, got nil")
+		}
+		if !strings.Contains(err.Error(), "query_key") {
+			t.Fatalf("error = %q, want to contain 'query_key'", err.Error())
+		}
+	})
+
+	t.Run("missing title returns error", func(t *testing.T) {
+		t.Parallel()
+		in := WriteChunkInput{
+			Type:     "KNOWLEDGE",
+			QueryKey: "test-key",
+			Content:  "Test content",
+		}
+		_, err := tools.WriteChunk(context.Background(), "", in)
+		if err == nil {
+			t.Fatalf("expected error for missing title, got nil")
+		}
+		if !strings.Contains(err.Error(), "title") {
+			t.Fatalf("error = %q, want to contain 'title'", err.Error())
+		}
+	})
+
+	t.Run("missing content returns error", func(t *testing.T) {
+		t.Parallel()
+		in := WriteChunkInput{
+			Type:     "KNOWLEDGE",
+			QueryKey: "test-key",
+			Title:    "Test",
+		}
+		_, err := tools.WriteChunk(context.Background(), "", in)
+		if err == nil {
+			t.Fatalf("expected error for missing content, got nil")
+		}
+		if !strings.Contains(err.Error(), "content") {
+			t.Fatalf("error = %q, want to contain 'content'", err.Error())
+		}
+	})
+}
+
+func TestWriteChunk_AlwaysInjectOverride(t *testing.T) {
+	t.Parallel()
+
+	// Verify WriteChunkInput.AlwaysInject is a pointer type (for optional override)
+	in := WriteChunkInput{
+		Type:         "KNOWLEDGE",
+		QueryKey:     "test-key",
+		Title:        "Test",
+		Content:      "Test content",
+		AlwaysInject: nil,
+	}
+	if in.AlwaysInject != nil {
+		t.Fatalf("AlwaysInject should be nil by default")
+	}
+
+	override := true
+	in.AlwaysInject = &override
+	if in.AlwaysInject == nil || !*in.AlwaysInject {
+		t.Fatalf("AlwaysInject override failed")
+	}
+}
+
+func TestNullStrPtr(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil returns nil interface", func(t *testing.T) {
+		t.Parallel()
+		r := nullStrPtr(nil)
+		if r != nil {
+			t.Fatalf("nullStrPtr(nil) = %v, want nil", r)
+		}
+	})
+
+	t.Run("non-nil returns value", func(t *testing.T) {
+		t.Parallel()
+		s := "test-string"
+		r := nullStrPtr(&s)
+		if r == nil {
+			t.Fatalf("nullStrPtr(&s) = nil, want 'test-string'")
+		}
+		if r != s {
+			t.Fatalf("nullStrPtr(&s) = %v, want 'test-string'", r)
+		}
+	})
+}
+
 func TestExcludeQueryKeyPrefixesClause(t *testing.T) {
 	t.Parallel()
 
