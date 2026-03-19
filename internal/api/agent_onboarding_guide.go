@@ -2,9 +2,7 @@ package api
 
 const agentOnboardingGuideMarkdown = `# Winnow Agent Onboarding Guide
 
-This guide is for an AI agent being onboarded to Winnow itself.
-
-Winnow is a context management platform for AI coding agents. Its job is to help agents stay effective in large codebases by storing research as structured, searchable context instead of forcing every new session to rediscover everything from scratch.
+Winnow is behavior-driven memory infrastructure for AI agents. It stores structured, searchable context that persists across sessions — and uses always-inject chunks to shape how agents behave, not just what they can query.
 
 ## What This Application Does
 
@@ -12,16 +10,10 @@ Winnow provides:
 
 - An HTTP API for orgs, projects, agents, memberships, and API keys
 - An MCP server over HTTP+SSE so coding agents can use Winnow tools directly
-- A Postgres-backed store of versioned context chunks with embeddings
-- Workflows for research, planning, compaction, review, and handoff
-
-The core product idea is simple:
-
-1. An agent researches a topic.
-2. The agent writes what it learned as a context chunk.
-3. Later agents search and reuse that chunk.
-4. When context becomes noisy or stale, agents compact or update it.
-5. After using context, agents review it so the knowledge base improves over time.
+- A Postgres-backed store of versioned context chunks with semantic search (pgvector)
+- Three scopes (PROJECT, AGENT, ORG) with always_inject behavior
+- Purpose-built write tools that route to the correct scope automatically
+- Session lifecycle for tracking agent work and consolidating memory
 
 Important architectural constraint: Winnow does not do server-side summarization. The server stores, searches, versions, and returns chunks. The agent performs synthesis client-side and writes improved context back.
 
@@ -29,60 +21,102 @@ Important architectural constraint: Winnow does not do server-side summarization
 
 The main persisted entities are:
 
-- orgs
-- users
-- projects
-- project_memberships
-- agents
-- agent_projects
-- api_keys
-- context_chunks
-- context_chunk_versions
-- context_reviews
+- orgs: top-level tenant boundary
+- users: human users
+- projects: project-level context boundary
+- project_memberships: human access to projects
+- agents: named agent records with types (dev, admin, research, orchestrator)
+- agent_types: registered types that control tool visibility
+- agent_projects: projects an agent is assigned to
+- api_keys: bearer keys used for MCP and context access (agent_id derived from key)
+- context_chunks: versioned knowledge units with scope, chunk_type, and always_inject flag
+- context_chunk_versions: historical versions of each chunk
+- context_reviews: usefulness/correctness reviews on chunks
+- chunk_types: registered types (KNOWLEDGE, MEMORY, CONVENTION, IDENTITY, PRINCIPLE, DECISION, RESEARCH, PLAN, SPEC, IMPLEMENTATION, CONSTRAINT, LESSON)
+- sessions: agent work sessions that track focus and memory
 
-The most important operational boundary is the project. Context is written and searched within a project scope.
+## Three Scopes
+
+Every chunk has a scope:
+
+- PROJECT: shared project knowledge — architecture, patterns, deployment config. Visible to all agents on the project.
+- AGENT: private agent memory — identity, episodic observations, preferences. Visible only to this agent.
+- ORG: org-wide knowledge — team composition, values, cross-project standards. Visible to all agents in the org.
+
+## always_inject
+
+Orthogonal to scope. Chunks with always_inject=true are surfaced automatically as ambient context — they don't need to be searched for. They form the behavioral baseline.
+
+- PROJECT + always_inject = write_convention (foundational rules)
+- AGENT + always_inject = write_identity (who this agent is)
+- ORG + always_inject = store_principle (org-wide values)
 
 ## How Agents Are Expected To Work
 
-Default operating loop:
+### Session lifecycle
 
-1. search_context for the topic or subsystem
+1. start_session(lifecycle_slug="dev") — creates a session, injects always_inject chunks
+2. register_focus(task="...", project_id="...") — tell Winnow what you're working on
+3. During work: search, read, write knowledge and memory
+4. end_session(session_id="...") — returns MEMORY chunks for review/promotion
+
+### Default operating loop
+
+1. search_context for the topic or subsystem (pass project_id)
 2. read_context for the most relevant chunks
-3. if context is missing, stale, or incomplete, inspect the codebase and write a new chunk with write_context or fix an existing one with update_context
-4. before a handoff, after a long session, or when working memory gets crowded, call compact_context, summarize the returned chunks client-side, and write back a compacted summary
-5. after using context to complete work, call review_context to rate usefulness and correctness
+3. If context is missing, stale, or incomplete:
+   - write_knowledge for project facts worth sharing
+   - write_memory for personal observations
+   - update_context for fixing existing chunks
+4. Before handoff or when context gets noisy: compact_context, summarize client-side, write back
+5. After using context: review_context to rate usefulness and correctness
 
-## MCP Tools You Can Use
+## MCP Tools
 
-- list_projects
-- search_context
-- read_context
-- write_context
-- update_context
-- get_context_versions
-- compact_context
-- review_context
-- delete_context
+### Session lifecycle
+- start_session: begin a work session
+- resume_session: resume after restart
+- get_active_session: check for existing session
+- register_focus: declare current task
+- end_session: end session, get MEMORY chunks for review
 
-Current chunk schema is structured around:
+### Purpose-built write tools (preferred)
+- write_identity: AGENT scope, always_inject=true — who this agent is
+- write_memory: AGENT scope, always_inject=false — episodic observations
+- write_knowledge: PROJECT scope, always_inject=false — project facts
+- write_convention: PROJECT scope, always_inject=true — foundational rules
+- write_org_knowledge: ORG scope, always_inject=false — org-wide facts
+- store_principle: ORG scope, always_inject=true — org values (requires promoted_by_user_id)
 
-- query_key
-- title
-- content
-- source_file
-- source_lines
-- gotchas
-- related
+### Read and search
+- search_context: semantic search with scope, chunk_type, always_inject filters
+- read_context: read by ID or query_key
+- get_context_versions: version history
+- compact_context: fetch chunks for agent-side compaction
 
-## Current Auth And Project Scoping Behavior
+### Other
+- update_context: versioned update with change_note
+- delete_context: remove a chunk
+- review_context: rate usefulness and correctness
+- write_context: legacy (deprecated — use purpose-built tools)
+- list_projects: list accessible projects
+- list_agents: list org agents (admin/orchestrator only)
+- create_project: create project (admin/orchestrator only)
+- add_agent_to_project / remove_agent_from_project: manage assignments
 
-Winnow exposes MCP at /mcp and expects a bearer API key in Authorization.
+## Chunk Schema
 
-Project scoping matters:
-
-- Context operations require a project scope.
-- For MCP tools, pass project_id in tool arguments.
-- Context REST routes still accept project_id query param or X-Project-ID header.
+All chunks support:
+- query_key: stable grouping key (e.g. "auth-middleware")
+- title: short descriptive title
+- content: the knowledge (markdown or structured text)
+- source_file: optional file path reference
+- source_lines: optional [start, end] line numbers
+- gotchas: optional list of warnings
+- related: optional related query_keys
+- scope: PROJECT | AGENT | ORG
+- chunk_type: KNOWLEDGE | MEMORY | CONVENTION | IDENTITY | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON
+- always_inject: boolean
 
 ## MCP Setup
 
@@ -111,41 +145,36 @@ http_headers = { Authorization = "Bearer <agent-api-key>" }
 
 ## How To Onboard A New Agent
 
-1. Call this onboarding endpoint with your API key.
-2. Inspect available_projects or call list_projects and pick a project if needed.
-3. Pass that project_id on MCP tool calls.
-4. Check if the project has existing context: search_context(query="*", limit=5).
-5. **If the project is empty or sparse, use the winnow-seed skill first.** Seeding is the most important step for a new project — without foundational context, all other workflows (research, plan, compact) have nothing to build on. Scan the codebase thoroughly and write structured chunks across a planned taxonomy.
-6. If context exists, use search_context to find architecture, auth, data model, deployment, and recent change context.
-7. Read the top results before touching code.
-8. If foundational context is missing in specific areas, create it immediately.
-9. At handoff, compact the relevant topic and write a summary chunk for the next agent.
+1. Connect MCP with your API key
+2. Call get_active_session() — resume if one exists, otherwise start_session()
+3. Call list_projects to find your target project
+4. Pass project_id on all tool calls
+5. Check if context exists: search_context(query="*", project_id="...", limit=5)
+6. If empty: use the winnow-seed skill to populate foundational context first
+7. If context exists: search for architecture, auth, data model, deployment
+8. Read the top results before touching code
+9. register_focus(task="...", project_id="...") to declare your task
+10. During work: write_knowledge for project facts, write_memory for personal observations
+11. At session end: compact, review, then end_session
+
+## Guardrails for Always-Inject Tools
+
+write_identity, write_convention, and store_principle consume context on every call. Before using:
+
+1. Will this still be true in 6 months?
+2. Does every agent need to know this?
+3. Would NOT knowing this cause a meaningful mistake?
+
+If any answer is no — use write_knowledge, write_memory, or write_org_knowledge instead.
 
 ## What Good Context Looks Like
 
-A useful context chunk should answer:
+- query_key: stable grouping key like "auth-middleware"
+- title: short descriptive summary
+- content: concise explanation with concrete details
+- source_file + source_lines: traceable to the codebase
+- gotchas: edge cases, hidden constraints
+- related: neighboring query keys for graph traversal
 
-- What is this subsystem or decision?
-- Which files matter?
-- What are the gotchas?
-- What related topics should a future agent inspect next?
-
-Preferred chunk shape:
-
-- query_key
-- title
-- content
-- source_file and source_lines
-- gotchas
-- related
-
-## Recommended Operating Rules For Agents
-
-- **Seed before everything else.** If a project has no context, use winnow-seed to populate it before doing any other work. An empty knowledge base makes all other workflows ineffective.
-- Search before writing. Duplicate chunks reduce retrieval quality.
-- Prefer updating an existing chunk over creating a second overlapping chunk.
-- Include concrete file references whenever knowledge came from the codebase.
-- Use compaction aggressively.
-- Review context after using it.
-- If a chunk seems foundational, inspect version history before trusting it blindly.
+Search before writing. Prefer updating existing chunks over creating overlapping ones.
 `

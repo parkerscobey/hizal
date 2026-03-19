@@ -1,5 +1,33 @@
 # Winnow: Workflows
 
+## Agent Memory Lifecycle
+
+This is the complete lifecycle for a Winnow-connected agent session:
+
+```
+Session start
+  └─ start_session(lifecycle_slug="dev")
+  └─ Identity injected (always_inject, AGENT scope)
+  └─ Org principles injected (always_inject, ORG scope)
+
+First project engagement
+  └─ Project conventions injected (always_inject, PROJECT scope)
+  └─ register_focus(task="...", project_id="...")
+
+During work
+  ├─ write_memory: episodic notes (memory-enabled agents)
+  ├─ write_knowledge: project facts
+  ├─ search_context: find relevant existing knowledge
+  └─ compact_context: compress noisy chunks
+
+Session end
+  ├─ end_session: returns MEMORY chunks for review/promotion
+  ├─ winnow-compact: merge noisy/overlapping chunks
+  └─ winnow-review: rate chunks used heavily
+```
+
+---
+
 ## Full Winnow Lifecycle
 
 ```
@@ -12,66 +40,95 @@
 │   └────┬─────┘     └────┬─────┘     └────┬─────┘               │
 │        │                │                │                      │
 │        ▼                ▼                ▼                      │
-│   Scan repos        search_context  write_context               │
-│   Plan taxonomy     read_context    (plan as                    │
-│   Write chunks      write_context     context)                  │
-│   Verify coverage                                               │
+│   write_knowledge   search_context  write_knowledge             │
+│   write_convention  write_knowledge (chunk_type=PLAN)           │
+│   (day zero)        write_memory                                │
 │                                                                 │
-│   winnow-seed       winnow-        winnow-                      │
-│   (day zero)        research        plan                        │
+│   winnow-seed       winnow-         winnow-                     │
+│   (first use)       research         plan                       │
 │                                                                 │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
 │   │ COMPACT  │◀────│ IMPLEMENT│────▶│  REVIEW  │               │
 │   └──────────┘     └──────────┘     └──────────┘               │
+│                                                                 │
+│   compact_context  write_memory     review_context              │
+│   write_knowledge  write_knowledge                              │
 │                                                                 │
 │   winnow-compact   (write code)     winnow-review               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Seeding comes first. Without foundational context, all other workflows
-(research, plan, compact, review) have nothing to build on.
+---
 
-## RPI Workflow Overview
+## RPI Workflow with Winnow
 
-Dex Horthy's Research → Plan → Implement workflow, mapped to Winnow tools:
+Research → Plan → Implement, mapped to Winnow's purpose-built tools:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    RPI Workflow with Winnow                  │
+│                    RPI Workflow with Winnow                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   ┌──────────┐     ┌──────────┐     ┌──────────┐                │
-│   │ RESEARCH │────▶│  PLAN    │────▶│ IMPLEMENT│                │
-│   └────┬─────┘     └────┬─────┘     └────┬─────┘                │
+│   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
+│   │ RESEARCH │────▶│  PLAN    │────▶│ IMPLEMENT│               │
+│   └────┬─────┘     └────┬─────┘     └────┬─────┘               │
 │        │                │                │                      │
 │        ▼                ▼                ▼                      │
-│   search_context    write_context    search_context             │
-│   read_context      (plan as         read_context               │
-│   write_context       context)                                  │
+│   search_context    write_knowledge  search_context             │
+│   read_context      (chunk_type=     write_memory               │
+│   write_knowledge    PLAN)           write_knowledge            │
+│   write_memory                       compact_context            │
 │                                                                 │
-│   winnow-         winnow-       winnow-                │
-│   research           plan             onboard (if handoff)      │
+│   winnow-research   winnow-plan     winnow-compact              │
+│                                     winnow-review               │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Research Phase
+## Session Start Flow
 
-### Flow
+```
+Agent starts
+    │
+    ▼
+get_active_session()
+    │
+    ├── Active session found? ──▶ resume_session(session_id)
+    │
+    └── No active session ──▶ start_session(lifecycle_slug="dev")
+                                    │
+                                    ▼
+                              Session created
+                                    │
+                                    ▼
+                              Always-inject chunks loaded:
+                              ├── AGENT scope: identity
+                              ├── ORG scope: principles
+                              └── PROJECT scope: conventions
+                                    │
+                                    ▼
+                              register_focus(task="...", project_id="...")
+                                    │
+                                    ▼
+                              Ready to work
+```
+
+---
+
+## Research Phase
 
 ```
                     ┌─────────────────────┐
                     │  Start Task         │
-                    │  (e.g., "add auth") │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
                     │  search_context     │
-                    │  query: "[topic]"   │
+                    │  (project_id, topic)│
                     └──────────┬──────────┘
                                │
                     ┌──────────┴───────────┐
@@ -79,193 +136,104 @@ Dex Horthy's Research → Plan → Implement workflow, mapped to Winnow tools:
                     ▼                      ▼
                Context found?         No context
                     │                      │
-          ┌─────────┴───────┐              │
-          ▼                 ▼              ▼
-    Read context      gaps exist?    Explore codebase
-          │                 │              │
-          ▼                 ▼              ▼
-    Identify gaps    Write context    Read files
-          │                 │              │
-          └────────┬────────┘              │
-                   ▼                       │
-              Write new context ◀──────────┘
-                   │
-                   ▼
-           Research complete
-```
-
-### Tools Used
-- `search_context` — find existing knowledge
-- `read_context` — dive into specific chunks
-- `write_context` — capture new findings
-
----
-
-## Plan Phase
-
-### Flow
-
-```
-                    ┌─────────────────────┐
-                    │  Research complete  │
-                    │  (context written)  │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Review all context │
-                    │  for task           │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Structure plan:    │
-                    │  - File paths       │
-                    │  - Line numbers     │
-                    │  - Code patterns    │
-                    │  - Test approach    │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Validate plan:     │
-                    │  - Can explain?     │
-                    │  - Specific?        │
-                    │  - Testable?        │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │                     │
-                    ▼                     ▼
-               Plan good             Plan needs work
-                    │                     │
-                    ▼                     ▼
-           Write as context      Revise with more detail
-           (for review/handoff)           │
-                    │                     │
-                    └────────┬────────────┘
-                             ▼
-                       Plan ready
-```
-
-### Tools Used
-- `read_context` — review research
-- `write_context` — store plan (as context)
-
----
-
-## Implement Phase
-
-### Flow
-
-```
-                    ┌─────────────────────┐
-                    │  Plan ready         │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Execute plan       │
-                    │  (write code)       │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │                     │
-                    ▼                     ▼
-              Need more info?         No - continue
-                    │                     │
-                    ▼                     ▼
-            search_context          Running long?
-            read_context            (check context usage)
+                    ▼                      ▼
+            Read + check             Explore codebase
+            staleness                      │
+                    │                      ▼
+                    ▼                write_knowledge
+            Identify gaps            (project facts)
                     │                      │
-                    └────────┬─────────────┘
-                             ▼
-                    ┌─────────────────────┐
-                    │  Checkpoint:        │
-                    │  - Context >40%?    │
-                    └─────────────────────┐
-                    │ Entered "dumb zone"?│
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │                     │
-                    ▼                     ▼
-                   Yes                    No
-                    │                     │
-                    ▼                     ▼
-           compact_context         Task complete
-           (reset context)               │
-           and continue                  ▼
-                              ┌─────────────────────┐
-                              │  Final: write       │
-                              │  context (optional) │
-                              └─────────────────────┘
+                    ▼                write_memory
+            write_knowledge          (personal observations)
+            or update_context
 ```
-
-### Tools Used
-- `search_context` — find additional info mid-work
-- `read_context` — review code while implementing
-- `compact_context` — avoid/combat dumb zone
 
 ---
 
-## Context Compaction Flow
+## Compaction Flow
 
 ### When to Compact
 
 ```
 Context Usage
      │
-  0% ├───────────────────────── Smart Zone ─────────────────────────▶
+  0% ├───────────────── Smart Zone ──────────────────▶
      │
- 40% ├──────────────────────── Dumb Zone Start ──────────────────────▶
+ 40% ├───────────────── Dumb Zone Start ─────────────▶ [compact here]
      │
- 60% ├──────────────────────────────▶ [Quality degrades]
+ 60% ├───────────────── Quality degrades ────────────▶
      │
-100% ├───────────────────────────────────────────────────────────────▶
+100% ├───────────────────────────────────────────────▶
 ```
 
-### Compaction Flow
-
-**All summarization happens agent-side.** The server only fetches matching chunks.
+### Flow
 
 ```
                     ┌─────────────────────┐
-                    │  Working on task    │
-                    │  for 15-20 min      │
+                    │  Context getting    │
+                    │  noisy (15-20 min)  │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
                     │  compact_context    │
-                    │  query: "[topic]"   │
                     │  (fetches chunks)   │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
                     │  Agent summarizes   │
-                    │  (client-side):     │
-                    │  - What learned?    │
-                    │  - Key files?       │
-                    │  - Gotchas?         │
-                    │  - Gaps?            │
+                    │  (client-side)      │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  write_context()    │
-                    │  (store compacted   │
-                    │   summary)          │
+                    │  write_knowledge()  │
+                    │  (compacted summary)│
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  Decision:          │
-                    │  a) Start fresh     │
-                    │     session         │
-                    │  b) Continue with   │
-                    │     compressed ctx  │
+                    │  delete_context()   │
+                    │  (original chunks)  │
+                    └─────────────────────┘
+```
+
+---
+
+## Session End Flow
+
+```
+                    ┌─────────────────────┐
+                    │  Work complete      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │  winnow-compact     │
+                    │  (if chunks written)│
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │  winnow-review      │
+                    │  (rate used chunks) │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │  end_session()      │
+                    │  returns MEMORY     │
+                    │  chunks for review  │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │  Review MEMORY:     │
+                    │  ├── Promote to     │
+                    │  │   write_knowledge│
+                    │  ├── Keep as memory │
+                    │  └── Discard        │
                     └─────────────────────┘
 ```
 
@@ -276,111 +244,35 @@ Context Usage
 ```
                     ┌─────────────────────┐
                     │  Agent A completes  │
-                    │  task context       │
+                    │  work session       │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  Compact context    │
-                    │  purpose: handoff   │
+                    │  winnow-compact     │
+                    │  (save for handoff) │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  Write summary      │
-                    │  as context         │
+                    │  end_session()      │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
                     │  Agent B starts     │
-                    │  search_context     │
-                    │  + read_context     │
+                    │  start_session()    │
+                    │  + winnow-onboard   │
                     └──────────┬──────────┘
                                │
                                ▼
                     ┌─────────────────────┐
                     │  Agent B has        │
-                    │  context from A!    │
+                    │  context from A +   │
+                    │  identity + convs   │
                     └─────────────────────┘
 ```
 
 ---
 
-## Review Flow
-
-### When to Review
-
-```
-After task completion (agent-initiated):
-  └─> Used context to complete work
-  └─> Rate usefulness and correctness
-  └─> Submit review
-
-On user feedback (user-directed):
-  └─> User unhappy with agent generation
-  └─> Agent reviews context that may have contributed
-  └─> Update context if needed
-```
-
-### Review Flow Diagram
-
-```
-                    ┌─────────────────────┐
-                    │  Task completed     │
-                    │  (or user feedback) │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Identify context   │
-                    │  used in task       │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Assess quality:    │
-                    │  - Usefulness (1-5) │
-                    │  - Correctness (1-5)│
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │  Determine action:  │
-                    │  useful → done      │
-                    │  needs_update → edit│
-                    │  outdated → refresh │
-                    │  incorrect → delete │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │                     │
-                    ▼                     ▼
-               Action: useful          Action needed
-                    │                     │
-                    ▼                     ▼
-           review_context()         Update context chunk
-                                        (write_context)
-```
-
----
-
-## File Structure
-
-```
-winnow/
-├── docs/
-│   ├── 01-problem-sources.md    # Problem, Dex talk, original MCP
-│   ├── 02-architecture.md       # System design, components
-│   ├── 03-mcp-tools.md          # MCP tool specifications
-│   ├── 04-skills.md             # Agent skills (research, compact, etc.)
-│   └── 05-workflows.md          # RPI workflow diagrams
-├── diagrams/
-│   └── (ASCII/mermaid diagrams)
-└── README.md
-```
-
----
-
-*Last updated: 2026-03-08*
-*Status: Draft / Iterating*
+*Last updated: 2026-03-19*

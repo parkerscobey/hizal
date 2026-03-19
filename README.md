@@ -1,6 +1,6 @@
 # Winnow
 
-**Context management for AI coding agents.** Winnow keeps your agents in the "smart zone" — efficient, focused context instead of an overwhelming wall of text.
+**Behavior-driven memory infrastructure for AI agents.** Winnow doesn't just store context — it modulates how agents think, remember, and collaborate across sessions.
 
 - 🔗 **API:** https://winnow-api.xferops.dev
 - 🖥️ **UI:** https://winnow.xferops.dev
@@ -10,14 +10,34 @@
 
 ## The Problem
 
-AI coding agents struggle in large codebases not because models are dumb — it's because context is poorly managed. Winnow fixes this:
+AI agents forget everything between sessions. Every new conversation starts from zero — rediscovering architecture, re-reading codebases, repeating mistakes. Context loss is the single biggest drag on agent productivity.
+
+The fix isn't a bigger context window. It's structured, persistent memory that shapes how agents behave.
 
 | Problem | Winnow Solution |
 |---------|----------------|
-| Agents forget what they learned | Write findings as searchable context chunks |
-| Context window fills up | Compaction resets state without losing knowledge |
+| Agents forget what they learned | Persistent memory across sessions (three scopes: project, agent, org) |
+| Identity drifts between sessions | `write_identity` — always-injected agent identity |
+| Conventions violated repeatedly | `write_convention` — foundational rules always in context |
+| Context window fills with noise | Compaction resets state without losing knowledge |
 | Knowledge goes stale | Versioned updates with full history |
-| Low-quality context accumulates | Review system flags and rates chunks |
+| No shared organizational values | `store_principle` — org-wide norms for all agents |
+
+---
+
+## Beyond Lookup: Behavior-Driven Agents
+
+Winnow is not a RAG system. It's behavior infrastructure.
+
+Traditional context tools answer the question "what does the agent know?" Winnow answers a different question: **"how does the agent behave?"**
+
+- **Identity chunks** (always injected) define who the agent is — role, values, working style
+- **Convention chunks** (always injected) define the rules the agent must always follow
+- **Principle chunks** (always injected) define org-wide values across all agents
+- **Memory chunks** (retrieved on demand) capture episodic observations and learned patterns
+- **Knowledge chunks** (retrieved on demand) store project facts, architecture, decisions
+
+The `always_inject` flag is the key differentiator. Chunks marked `always_inject` are surfaced automatically as ambient context — they don't need to be searched for. They form the behavioral baseline that shapes every interaction.
 
 ---
 
@@ -31,11 +51,9 @@ curl -X POST https://winnow-api.xferops.dev/v1/keys \
   -d '{"org_slug": "your-org"}'
 ```
 
-Returns: `{ "key": "ctx_your-org_..." }` — save this, it's only shown once.
-
 ### 2. Configure your MCP client
 
-**Claude Desktop / Cursor / OpenClaw** — add to your MCP config:
+**Claude Desktop / Cursor / OpenClaw / OpenCode** — add to your MCP config:
 
 ```json
 {
@@ -50,101 +68,145 @@ Returns: `{ "key": "ctx_your-org_..." }` — save this, it's only shown once.
 }
 ```
 
-### 3. Use it in your agent
+### 3. Start a session and work
 
 ```
-search_context("how does authentication work")
+start_session(lifecycle_slug="dev")
+→ returns session_id, injects identity + conventions automatically
+
+search_context(query="how does authentication work", project_id="...")
 → returns relevant chunks ranked by semantic similarity
 
-write_context(
+write_knowledge(
   query_key="auth-flow",
   title="JWT verification in middleware",
   content="The auth middleware validates JWTs by...",
-  source_file="internal/auth/middleware.go",
-  source_lines=[42, 67]
+  project_id="...",
+  source_file="internal/auth/middleware.go"
 )
-→ stores with embedding for future retrieval
-```
+→ stores as PROJECT-scoped knowledge with embedding
 
-That's it. Your agent now has persistent, searchable memory.
+end_session(session_id="...")
+→ returns MEMORY chunks for review and promotion
+```
 
 ---
 
-**Researching / Designing** — Defining the product before implementation
+## Three Scopes
 
-All tools require `Authorization: Bearer <key>` header (configured once in your MCP client).
+Every chunk in Winnow has a scope that determines who sees it:
 
-| Tool | What it does |
-|------|-------------|
-| `write_context` | Store a research finding or knowledge chunk |
-| `search_context` | Semantic search across all chunks |
-| `read_context` | Retrieve a specific chunk with version history |
-| `update_context` | Versioned update to an existing chunk |
-| `get_context_versions` | View full version history |
-| `compact_context` | Fetch chunks for agent-side compaction |
-| `review_context` | Rate chunk quality (usefulness + correctness) |
-| `delete_context` | Remove a chunk |
+| Scope | Who sees it | Example |
+|-------|------------|---------|
+| **PROJECT** | All agents on this project | Architecture docs, API patterns, deployment config |
+| **AGENT** | Only this agent | Personal observations, work preferences, episodic memory |
+| **ORG** | All agents in the org | Team composition, org values, cross-project standards |
 
-→ Full tool reference: [`docs/mcp-guide.md`](./docs/mcp-guide.md)
+Scope is orthogonal to `always_inject`. A PROJECT convention is always in context for every agent on that project. An AGENT memory is retrieved on demand only for that agent.
 
 ---
 
-## REST API
+## Purpose-Built Write Tools
 
-Same auth, same data — REST alternative to MCP.
+Instead of a generic `write_context`, Winnow provides six tools whose names communicate intent:
 
-```
-POST   /v1/context            # write
-GET    /v1/context/search     # search
-GET    /v1/context/compact    # compact
-GET    /v1/context/:id        # read
-PATCH  /v1/context/:id        # update
-DELETE /v1/context/:id        # delete
-GET    /v1/context/:id/versions  # version history
-POST   /v1/context/:id/review    # review
-GET    /health                # health check
-```
+| Tool | Scope | Always Inject | Use When |
+|------|-------|---------------|----------|
+| `write_identity` | AGENT | ✅ yes | Provisioning — who this agent is |
+| `write_memory` | AGENT | no | During work — personal observations, learned patterns |
+| `write_knowledge` | PROJECT | no | Sharing facts — architecture, patterns, decisions |
+| `write_convention` | PROJECT | ✅ yes | Foundational rules every agent must always know |
+| `write_org_knowledge` | ORG | no | Org-wide facts retrieved on demand |
+| `store_principle` | ORG | ✅ yes | Org values — requires human intent |
 
-→ Full API reference: [`docs/api-reference.md`](./docs/api-reference.md)
+The legacy `write_context` tool remains available (defaults to PROJECT scope, `always_inject=false`) but is deprecated in favor of these purpose-built tools.
+
+### Guardrails for Always-Inject Tools
+
+`write_identity`, `write_convention`, and `store_principle` consume context on **every call** for **every affected agent**. Before using them, ask:
+
+1. Will this still be true and relevant in 6 months?
+2. Does every agent (or this agent in every session) need to know this?
+3. Would NOT knowing this cause a meaningful mistake?
+
+If any answer is no — use `write_knowledge`, `write_memory`, or `write_org_knowledge` instead.
 
 ---
 
-## How We Use It (and How You Might)
+## Session Lifecycle
+
+Winnow sessions track agent work across a conversation:
+
+```
+Session start
+  └─ start_session(lifecycle_slug="dev")
+  └─ Identity + org principles injected automatically (always_inject, AGENT + ORG scope)
+
+First project engagement
+  └─ Project conventions injected (always_inject, PROJECT scope)
+  └─ register_focus(task="implement billing webhooks", project_id="...")
+
+During work
+  ├─ write_memory: episodic notes (memory-enabled agents)
+  ├─ write_knowledge: project facts to share with team
+  ├─ search_context: find relevant existing knowledge
+  └─ compact_context: compress noisy chunks
+
+Session end
+  └─ end_session(session_id="...")
+  └─ Returns MEMORY chunks written during session for review/promotion
+```
+
+---
+
+## Chunk Types
+
+Every chunk has a `chunk_type` that describes what it contains:
+
+| Type | Purpose | Consolidation |
+|------|---------|---------------|
+| IDENTITY | Who this agent is | KEEP |
+| MEMORY | Episodic observations | SURFACE at session end |
+| KNOWLEDGE | Project facts | KEEP |
+| CONVENTION | Foundational rules | KEEP |
+| PRINCIPLE | Org values | KEEP |
+| DECISION | Architectural decisions | KEEP |
+| RESEARCH | Explorations, investigations | SURFACE |
+| PLAN | Implementation plans | SURFACE |
+| SPEC | Feature specifications | SURFACE |
+| IMPLEMENTATION | Build notes | SURFACE |
+| CONSTRAINT | Hard boundaries | KEEP |
+| LESSON | Learned patterns | SURFACE |
+
+Chunk types are metadata, not workflow state. Winnow labels chunks; it does not enforce transitions.
+
+---
+
+## Agent Types
+
+Agents register with a type that determines which MCP tools they can access:
+
+| Type | Tools | Use Case |
+|------|-------|----------|
+| `dev` | All read/write/session tools | Development agents |
+| `admin` | All tools + project management | Orchestrator agents |
+| `research` | Read/write/search/compact | Research-focused agents |
+| `orchestrator` | All tools + create_project, list_agents, agent management | Full platform access |
+
+---
+
+## How We Use It
 
 Winnow handles memory and context. It doesn't replace your task tracker or your orchestrator — it works alongside them.
 
 **Our setup at XferOps:**
 
-1. A long-running Winnow-enabled orchestrator agent (OpenClaw) receives a task from a human via Telegram
-2. The orchestrator interacts with the human and, using Winnow, creates specs in Forge (our project management tool) and passes the ticket ID to a dev agent (OpenCode)
-  - Winnow itself could easily be used for specs.
-3. The dev agent starts a Winnow session, reads the Forge ticket, searches Winnow for relevant context, then implements and opens a PR
-4. At the end of the session, the dev agent calls `end_session` — Winnow returns the MEMORY chunks written during the session for review and promotion
+1. A long-running orchestrator agent (OpenClaw) receives a task via Telegram
+2. The orchestrator searches Winnow for context, creates a spec, and spawns a dev agent (OpenCode)
+3. The dev agent calls `start_session`, reads the spec, searches Winnow for relevant context, then implements and opens a PR
+4. At session end, `end_session` returns MEMORY chunks for review and promotion
 
-**The specification layer is deliberately generic.** Winnow doesn't care where your task spec comes from:
-
-| Source | How it works |
-|--------|-------------|
-| **Forge / Linear / Jira** | Orchestrator or human passes a ticket ID; agent reads spec via MCP or API |
-| **Orchestrator prompt** | Orchestrator writes a detailed prompt directly; agent extracts task and search hints from it |
-| **Winnow chunk** | Orchestrator writes a KNOWLEDGE or DECISION chunk as the spec; agent searches for it by query key |
-| **Plain file** | A spec.md or similar; works fine, though it trades Winnow's persistence for simplicity |
-
-The pattern is always the same: **Winnow provides memory and context; something else provides the task definition.** See [`AGENTS.md`](./AGENTS.md) for how we structure the dev agent workflow.
-
----
-
-## Core Concepts
-
-**Context Chunk** — A small, composable unit of knowledge. Has a title, content, source location, gotchas, and related chunk IDs.
-
-**Query Key** — A namespace tag on chunks (e.g. `"auth-flow"`, `"database-schema"`). Used to scope searches.
-
-**Compaction** — Fetch a set of related chunks and have your agent summarize them into a single new chunk. Resets working context without losing knowledge.
-
-**Smart Zone** — Keeping your context window under ~40% full. Compaction is the main tool to stay there.
-
-**RPI Workflow** — Research → Plan → Implement. Use Winnow during the Research phase to accumulate knowledge, then compact before implementation.
+**The specification layer is deliberately generic.** Winnow doesn't care where your task spec comes from — Forge, Linear, Jira, a plain file, or a Winnow chunk itself.
 
 ---
 
@@ -152,16 +214,19 @@ The pattern is always the same: **Winnow provides memory and context; something 
 
 | Doc | Contents |
 |-----|---------|
-| [`docs/api-reference.md`](./docs/api-reference.md) | Full REST API with request/response examples |
-| [`docs/mcp-guide.md`](./docs/mcp-guide.md) | MCP connection guide + all tool schemas |
-| [`docs/06-agent-onboarding.md`](./docs/06-agent-onboarding.md) | How to onboard a Winnow-connected agent to this application |
-| [`docs/workflows.md`](./docs/workflows.md) | Example agent workflows |
+| [`docs/01-problem-sources.md`](./docs/01-problem-sources.md) | Problem statement, research sources |
+| [`docs/02-architecture.md`](./docs/02-architecture.md) | System design, data model, components |
+| [`docs/03-mcp-tools.md`](./docs/03-mcp-tools.md) | Full MCP tool reference |
+| [`docs/04-skills.md`](./docs/04-skills.md) | Agent skill specifications |
+| [`docs/05-workflows.md`](./docs/05-workflows.md) | Session lifecycle and workflow diagrams |
+| [`docs/06-agent-onboarding.md`](./docs/06-agent-onboarding.md) | Provisioning guide (wizard + self-hosted) |
+| [`docs/api-reference.md`](./docs/api-reference.md) | REST API reference |
 
 ---
 
 ## Development
 
-**v0.1** — Production API live at `winnow-api.xferops.dev`. Self-service key management UI coming in v0.2.
+**v0.2** — Production API live at `winnow-api.xferops.dev`. Sessions, scopes, agent types, chunk types, and purpose-built write tools all shipped.
 
 ### Database Model Contract
 
