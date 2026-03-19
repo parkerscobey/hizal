@@ -8,7 +8,7 @@ This file tells you how to work here. Read it fully before doing anything else.
 ## Your First Three Steps (always, no exceptions)
 
 1. **Start a Winnow session**
-2. **Read the task spec**
+2. **Read the task spec (from Forge)**
 3. **Search Winnow for existing context on the task**
 
 Only then start writing code.
@@ -42,9 +42,6 @@ winnow_register_focus(
 
 ## 2. Read the Task Spec
 
-Read the task specification before searching Winnow — you need to know *what* you're building
-before you know what to search for.
-
 **In our setup**, specs come from Forge (our project management tool) via the forge MCP:
 
 ```
@@ -53,10 +50,6 @@ forge_get_task(taskId="<ticket-id>")
 
 The ticket description is the spec. Read it fully. Extract the key concepts and decisions
 before moving to step 3.
-
-**Your setup may be different.** See the README for other patterns — orchestrator prompts,
-Linear/Jira tickets, Winnow chunks written by an orchestrator, etc. The pattern is the same
-regardless of where the spec lives: read it first, search Winnow second.
 
 ---
 
@@ -71,8 +64,8 @@ winnow_search_context(
 )
 ```
 
-Run 2-3 searches with different phrasings. Read the returned chunks — they contain
-architecture decisions, conventions, and prior design work that must inform your implementation.
+Run searches. Read the returned chunks — they contain architecture decisions, conventions,
+and prior design work that must inform your implementation.
 Don't rediscover what the team already decided.
 
 ---
@@ -147,7 +140,7 @@ gh pr create \
   --title "feat(<ticket-id-lowercase>): <description>" \
   --body "## Summary\n\n<what you built>\n\n## Testing\n\n<what you ran>\n\n## Migration Impact\n\n<if any>"
 
-gh pr edit --add-reviewer parker-xferops,quinn-xferops-ai,marcus-xferops-ai
+gh pr edit --add-reviewer parker-xferops,adam-xferops-ai
 ```
 
 Always request review from `parker-xferops`.

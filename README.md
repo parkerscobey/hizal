@@ -115,8 +115,9 @@ Winnow handles memory and context. It doesn't replace your task tracker or your 
 
 **Our setup at XferOps:**
 
-1. A long-running orchestrator agent (OpenClaw) receives a task from a human via Telegram
-2. The orchestrator looks up the spec in Forge (our project management tool) and passes the ticket ID to a dev agent (OpenCode)
+1. A long-running Winnow-enabled orchestrator agent (OpenClaw) receives a task from a human via Telegram
+2. The orchestrator interacts with the human and, using Winnow, creates specs in Forge (our project management tool) and passes the ticket ID to a dev agent (OpenCode)
+  - Winnow itself could easily be used for specs.
 3. The dev agent starts a Winnow session, reads the Forge ticket, searches Winnow for relevant context, then implements and opens a PR
 4. At the end of the session, the dev agent calls `end_session` — Winnow returns the MEMORY chunks written during the session for review and promotion
 
