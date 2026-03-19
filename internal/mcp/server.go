@@ -774,6 +774,12 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err != nil {
 			return nil, err
 		}
+		if in.AgentID == "" && scope.AgentID != nil {
+			in.AgentID = *scope.AgentID
+		}
+		if in.OrgID == "" && scope.OrgID != "" {
+			in.OrgID = scope.OrgID
+		}
 		return s.tools.SearchContext(ctx, projectID, in, scope.SearchFilters)
 
 	case "read_context":
@@ -821,6 +827,12 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		scope, err := s.loadAPIKeyScope(ctx, r)
 		if err != nil {
 			return nil, err
+		}
+		if in.AgentID == "" && scope.AgentID != nil {
+			in.AgentID = *scope.AgentID
+		}
+		if in.OrgID == "" && scope.OrgID != "" {
+			in.OrgID = scope.OrgID
 		}
 		return s.tools.CompactContext(ctx, projectID, in, scope.SearchFilters)
 
