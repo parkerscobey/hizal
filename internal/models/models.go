@@ -75,6 +75,7 @@ type Agent struct {
 	// false (default): knowledge-only — PROJECT + ORG scope only.
 	// true:            full behavior-driven — AGENT scope unlocked (Pro tier).
 	MemoryEnabled bool      `json:"memory_enabled" db:"memory_enabled"`
+	Tags          []string  `json:"tags" db:"tags"`
 	CreatedAt     time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }

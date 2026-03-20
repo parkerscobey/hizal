@@ -167,10 +167,22 @@ func (t *Tools) resolveAgentType(ctx context.Context, agentID string) string {
 	return *typeSlug
 }
 
+func (t *Tools) resolveAgentTags(ctx context.Context, agentID string) []string {
+	var tags []string
+	err := t.pool.QueryRow(ctx, `
+		SELECT tags FROM agents WHERE id = $1
+	`, agentID).Scan(&tags)
+	if err != nil {
+		return []string{}
+	}
+	return tags
+}
+
 func (t *Tools) fetchInjectAudienceCandidates(
 	ctx context.Context,
 	agentID string,
 	agentType string,
+	agentTags []string,
 	lifecycleType *string,
 	projectID *string,
 	orgID string,
@@ -256,7 +268,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 		if lifecycleType != nil {
 			lifecycleStr = *lifecycleType
 		}
-		if ia.MatchesSession(agentID, agentType, lifecycleStr, orgID, nil, nil) {
+		if ia.MatchesSession(agentID, agentType, lifecycleStr, orgID, agentTags, nil) {
 			chunks = append(chunks, cand.InjectedChunk)
 		}
 	}
@@ -357,8 +369,9 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		scopes = intersectScopes(scopes, typeFilters.IncludeScopes)
 	}
 
+	agentTags := t.resolveAgentTags(ctx, in.AgentID)
 	chunks, truncated, err := t.fetchInjectAudienceCandidates(
-		ctx, in.AgentID, t.resolveAgentType(ctx, in.AgentID), &lifecycleSlug, in.ProjectID, orgID, scopes,
+		ctx, in.AgentID, t.resolveAgentType(ctx, in.AgentID), agentTags, &lifecycleSlug, in.ProjectID, orgID, scopes,
 		typeFilters.IncludeChunkTypes,
 		typeFilters.ExcludeChunkTypes,
 		typeFilters.ExcludeQueryKeys,
@@ -451,8 +464,9 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		scopes = intersectScopes(scopes, typeFilters.IncludeScopes)
 	}
 
+	agentTags := t.resolveAgentTags(ctx, sess.AgentID)
 	chunks, _, err := t.fetchInjectAudienceCandidates(
-		ctx, sess.AgentID, t.resolveAgentType(ctx, sess.AgentID), lcSlug, sess.ProjectID, orgID, scopes,
+		ctx, sess.AgentID, t.resolveAgentType(ctx, sess.AgentID), agentTags, lcSlug, sess.ProjectID, orgID, scopes,
 		typeFilters.IncludeChunkTypes,
 		typeFilters.ExcludeChunkTypes,
 		typeFilters.ExcludeQueryKeys,
