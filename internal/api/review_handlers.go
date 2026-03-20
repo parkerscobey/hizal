@@ -109,7 +109,7 @@ func (h *ReviewHandlers) ReviewInbox(w http.ResponseWriter, r *http.Request) {
 			nr.min_usefulness,
 			nr.min_correctness,
 			nr.priority_bucket,
-			ARRAY[
+			ARRAY(
 				SELECT jsonb_build_object(
 					'action', cr.action,
 					'note', COALESCE(
@@ -125,7 +125,7 @@ func (h *ReviewHandlers) ReviewInbox(w http.ResponseWriter, r *http.Request) {
 					OR cr.correctness < 3
 				)
 				ORDER BY cr.created_at DESC
-			] AS stale_signals_json
+			) AS stale_signals_json
 		FROM needs_review nr
 		LEFT JOIN projects p ON p.id = nr.project_id
 		ORDER BY nr.priority_bucket ASC, nr.last_activity ASC
