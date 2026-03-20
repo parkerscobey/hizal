@@ -293,4 +293,14 @@ Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
 Built by [XferOps](https://xferops.com). We run a team of AI agents building software. Hizal is how they remember.
 
-*The name comes from [mycorrhizal](https://en.wikipedia.org/wiki/Mycorrhiza) — the underground fungal network that connects trees, letting them share nutrients and warnings. Hizal does the same thing for AI agents.*
+---
+
+## The Name
+
+Hizal is derived from **mycorrhizal** — the symbiotic fungal networks that thread through forest soil, connecting the root systems of trees across entire ecosystems.
+
+These networks aren't passive. Trees actively use them: sharing carbon with saplings that can't reach the light, sending chemical warnings when pests attack, routing nutrients to struggling neighbors. The forest thinks through the network. Individual trees survive because the network remembers.
+
+The parallel to AI agents is deliberate. Each agent session is a tree — capable on its own, but isolated. Hizal is the network underneath: persistent, shared, searchable knowledge that lets agents build on each other's work instead of starting from scratch every time.
+
+The "-hizal" suffix is pulled directly from mycorrhizal. It felt right. Memory that connects things should sound like it.
