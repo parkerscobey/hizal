@@ -111,9 +111,10 @@ func TestScanChunkSearchRow(t *testing.T) {
 		&createdByAgent,
 		createdAt,
 		updatedAt,
-		2,    // version
-		0.88, // cosine score
+		2,       // version
+		0.88,    // cosine score
 		lastReviewAt,
+		"private", // visibility
 	}}
 
 	chunk, version, score, gotLastReviewAt, err := scanChunkSearchRow(row)
@@ -135,6 +136,9 @@ func TestScanChunkSearchRow(t *testing.T) {
 	}
 	if !gotLastReviewAt.Equal(lastReviewAt) {
 		t.Fatalf("lastReviewAt = %v, want %v", gotLastReviewAt, lastReviewAt)
+	}
+	if chunk.Visibility != "private" {
+		t.Fatalf("Visibility = %q, want 'private'", chunk.Visibility)
 	}
 }
 
@@ -355,6 +359,7 @@ func TestScanChunkResultRow(t *testing.T) {
 		updatedAt,
 		4,
 		0.77,
+		"public", // visibility
 	}}
 
 	chunk, version, score, err := scanChunkResultRow(row)
@@ -376,6 +381,9 @@ func TestScanChunkResultRow(t *testing.T) {
 	}
 	if score != 0.77 {
 		t.Fatalf("score = %v, want 0.77", score)
+	}
+	if chunk.Visibility != "public" {
+		t.Fatalf("Visibility = %q, want 'public'", chunk.Visibility)
 	}
 }
 
@@ -2034,5 +2042,36 @@ func TestEffectiveInjectAudience_RoundTrip(t *testing.T) {
 	got2 := effectiveInjectAudience(nil, defaultIA)
 	if !got2.Rules[0].All {
 		t.Error("default rule All should be true")
+	}
+}
+
+func TestNormalizeVisibility(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ in, want string }{
+		{"public", "public"},
+		{"private", "private"},
+		{"", "private"},
+		{"invalid", "private"},
+		{"PUBLIC", "private"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			if got := normalizeVisibility(tt.in); got != tt.want {
+				t.Errorf("normalizeVisibility(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWriteChunkInput_VisibilityField(t *testing.T) {
+	t.Parallel()
+	in := WriteChunkInput{Type: "KNOWLEDGE", QueryKey: "k", Title: "T", Content: "C"}
+	if in.Visibility != "" {
+		t.Error("Visibility should be empty string by default")
+	}
+	in.Visibility = "public"
+	if in.Visibility != "public" {
+		t.Error("Visibility should be settable to 'public'")
 	}
 }

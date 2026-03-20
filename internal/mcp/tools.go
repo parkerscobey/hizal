@@ -31,63 +31,68 @@ const (
 // ---- Input types for purpose-built write tools ----
 
 type WriteIdentityInput struct {
-	AgentID     string                    `json:"agent_id"`
-	QueryKey    string                    `json:"query_key"`
-	Title       string                    `json:"title"`
-	Content     string                    `json:"content"`
-	SourceFile  string                    `json:"source_file,omitempty"`
-	SourceLines [2]int                    `json:"source_lines,omitempty"`
-	Gotchas     []string                  `json:"gotchas,omitempty"`
-	Related     []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	AgentID        string                    `json:"agent_id"`
+	QueryKey       string                    `json:"query_key"`
+	Title          string                    `json:"title"`
+	Content        string                    `json:"content"`
+	SourceFile     string                    `json:"source_file,omitempty"`
+	SourceLines    [2]int                    `json:"source_lines,omitempty"`
+	Gotchas        []string                  `json:"gotchas,omitempty"`
+	Related        []string                  `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
+	Visibility     string                    `json:"visibility,omitempty"`
 }
 
 type WriteMemoryInput struct {
-	AgentID     string                    `json:"agent_id"`
-	QueryKey    string                    `json:"query_key"`
-	Title       string                    `json:"title"`
-	Content     string                    `json:"content"`
-	SourceFile  string                    `json:"source_file,omitempty"`
-	SourceLines [2]int                    `json:"source_lines,omitempty"`
-	Gotchas     []string                  `json:"gotchas,omitempty"`
-	Related     []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	AgentID        string                    `json:"agent_id"`
+	QueryKey       string                    `json:"query_key"`
+	Title          string                    `json:"title"`
+	Content        string                    `json:"content"`
+	SourceFile     string                    `json:"source_file,omitempty"`
+	SourceLines    [2]int                    `json:"source_lines,omitempty"`
+	Gotchas        []string                  `json:"gotchas,omitempty"`
+	Related        []string                  `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
+	Visibility     string                    `json:"visibility,omitempty"`
 }
 
 type WriteKnowledgeInput struct {
-	ProjectID   string                    `json:"project_id"`
-	QueryKey    string                    `json:"query_key"`
-	Title       string                    `json:"title"`
-	Content     string                    `json:"content"`
-	SourceFile  string                    `json:"source_file,omitempty"`
-	SourceLines [2]int                    `json:"source_lines,omitempty"`
-	Gotchas     []string                  `json:"gotchas,omitempty"`
-	Related     []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	ProjectID      string                    `json:"project_id"`
+	QueryKey       string                    `json:"query_key"`
+	Title          string                    `json:"title"`
+	Content        string                    `json:"content"`
+	SourceFile     string                    `json:"source_file,omitempty"`
+	SourceLines    [2]int                    `json:"source_lines,omitempty"`
+	Gotchas        []string                  `json:"gotchas,omitempty"`
+	Related        []string                  `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
+	Visibility     string                    `json:"visibility,omitempty"`
 }
 
 type WriteConventionInput struct {
-	ProjectID   string                    `json:"project_id"`
-	QueryKey    string                    `json:"query_key"`
-	Title       string                    `json:"title"`
-	Content     string                    `json:"content"`
-	SourceFile  string                    `json:"source_file,omitempty"`
-	SourceLines [2]int                    `json:"source_lines,omitempty"`
-	Gotchas     []string                  `json:"gotchas,omitempty"`
-	Related     []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	ProjectID      string                    `json:"project_id"`
+	QueryKey       string                    `json:"query_key"`
+	Title          string                    `json:"title"`
+	Content        string                    `json:"content"`
+	SourceFile     string                    `json:"source_file,omitempty"`
+	SourceLines    [2]int                    `json:"source_lines,omitempty"`
+	Gotchas        []string                  `json:"gotchas,omitempty"`
+	Related        []string                  `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
+	Visibility     string                    `json:"visibility,omitempty"`
 }
 
 type WriteOrgKnowledgeInput struct {
-	OrgID       string                    `json:"org_id"`
-	QueryKey    string                    `json:"query_key"`
-	Title       string                    `json:"title"`
-	Content     string                    `json:"content"`
-	SourceFile  string                    `json:"source_file,omitempty"`
-	SourceLines [2]int                    `json:"source_lines,omitempty"`
-	Gotchas     []string                  `json:"gotchas,omitempty"`
-	Related     []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	OrgID          string                    `json:"org_id"`
+	QueryKey       string                    `json:"query_key"`
+	Title          string                    `json:"title"`
+	Content        string                    `json:"content"`
+	SourceFile     string                    `json:"source_file,omitempty"`
+	SourceLines    [2]int                    `json:"source_lines,omitempty"`
+	Gotchas        []string                  `json:"gotchas,omitempty"`
+	Related        []string                  `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
+	Visibility     string                    `json:"visibility,omitempty"`
 }
 
 type StorePrincipleInput struct {
@@ -100,7 +105,8 @@ type StorePrincipleInput struct {
 	SourceLines      [2]int                    `json:"source_lines,omitempty"`
 	Gotchas          []string                  `json:"gotchas,omitempty"`
 	Related          []string                  `json:"related,omitempty"`
-	InjectAudience   *models.InjectAudience   `json:"inject_audience,omitempty"`
+	InjectAudience   *models.InjectAudience    `json:"inject_audience,omitempty"`
+	Visibility       string                    `json:"visibility,omitempty"`
 }
 
 type WriteChunkInput struct {
@@ -117,6 +123,7 @@ type WriteChunkInput struct {
 	SourceLines     [2]int           `json:"source_lines,omitempty"`
 	Gotchas         []string         `json:"gotchas,omitempty"`
 	Related         []string         `json:"related,omitempty"`
+	Visibility      string           `json:"visibility,omitempty"`
 }
 
 // computeFreshness returns a score multiplier in [FreshnessMin, 1.0] based on
@@ -168,6 +175,9 @@ type WriteContextInput struct {
 	SourceLines [2]int   `json:"source_lines,omitempty"`
 	Gotchas     []string `json:"gotchas,omitempty"`
 	Related     []string `json:"related,omitempty"`
+	// Visibility controls public hub discoverability. "private" (default) | "public".
+	// Public chunks are never auto-injected — only discoverable on the hub.
+	Visibility string `json:"visibility,omitempty"`
 }
 
 type WriteContextResult struct {
@@ -177,6 +187,7 @@ type WriteContextResult struct {
 	ChunkType       string                  `json:"chunk_type"`
 	QueryKey        string                  `json:"query_key"`
 	Title           string                  `json:"title"`
+	Visibility      string                  `json:"visibility,omitempty"`
 	CreatedAt       time.Time               `json:"created_at"`
 }
 
@@ -211,25 +222,26 @@ type StaleSignal struct {
 }
 
 type ChunkResult struct {
-	ID           string        `json:"id"`
-	Scope        string        `json:"scope"`
-	AgentID      *string       `json:"agent_id,omitempty"`
-	OrgID        *string       `json:"org_id,omitempty"`
-	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
-	ChunkType    string        `json:"chunk_type"`
-	QueryKey     string        `json:"query_key"`
-	Title        string        `json:"title"`
-	Content      string        `json:"content"`
-	SourceFile   string        `json:"source_file,omitempty"`
-	SourceLines  []int         `json:"source_lines,omitempty"`
-	Gotchas      []string      `json:"gotchas,omitempty"`
-	Related      []string      `json:"related,omitempty"`
-	Score        float64       `json:"score,omitempty"`
-	Freshness    float64       `json:"freshness,omitempty"`
-	StaleSignals []StaleSignal `json:"stale_signals,omitempty"`
-	Version      int           `json:"version,omitempty"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
+	ID             string                  `json:"id"`
+	Scope          string                  `json:"scope"`
+	AgentID        *string                 `json:"agent_id,omitempty"`
+	OrgID          *string                 `json:"org_id,omitempty"`
+	InjectAudience *models.InjectAudience  `json:"inject_audience,omitempty"`
+	ChunkType      string                  `json:"chunk_type"`
+	QueryKey       string                  `json:"query_key"`
+	Title          string                  `json:"title"`
+	Content        string                  `json:"content"`
+	SourceFile     string                  `json:"source_file,omitempty"`
+	SourceLines    []int                   `json:"source_lines,omitempty"`
+	Gotchas        []string                `json:"gotchas,omitempty"`
+	Related        []string                `json:"related,omitempty"`
+	Visibility     string                  `json:"visibility,omitempty"`
+	Score          float64                 `json:"score,omitempty"`
+	Freshness      float64                 `json:"freshness,omitempty"`
+	StaleSignals   []StaleSignal           `json:"stale_signals,omitempty"`
+	Version        int                     `json:"version,omitempty"`
+	CreatedAt      time.Time               `json:"created_at"`
+	UpdatedAt      time.Time               `json:"updated_at"`
 }
 
 type SearchContextResult struct {
@@ -254,16 +266,17 @@ type ReadContextResult struct {
 }
 
 type UpdateContextInput struct {
-	ProjectID   string   `json:"project_id,omitempty"`
-	ID          string   `json:"id"`
-	Title       *string  `json:"title,omitempty"`
-	Content     *string  `json:"content,omitempty"`
-	SourceFile  *string  `json:"source_file,omitempty"`
-	SourceLines []int    `json:"source_lines,omitempty"`
-	Gotchas     []string `json:"gotchas,omitempty"`
-	Related     []string `json:"related,omitempty"`
+	ProjectID      string           `json:"project_id,omitempty"`
+	ID             string           `json:"id"`
+	Title          *string          `json:"title,omitempty"`
+	Content        *string          `json:"content,omitempty"`
+	SourceFile     *string          `json:"source_file,omitempty"`
+	SourceLines    []int            `json:"source_lines,omitempty"`
+	Gotchas        []string         `json:"gotchas,omitempty"`
+	Related        []string         `json:"related,omitempty"`
 	ChangeNote     string           `json:"change_note"`
 	InjectAudience *json.RawMessage `json:"inject_audience,omitempty"`
+	Visibility     *string          `json:"visibility,omitempty"`
 }
 
 type UpdateContextResult struct {
@@ -432,6 +445,13 @@ func effectiveInjectAudience(override *models.InjectAudience, defaultIA *models.
 	return defaultIA
 }
 
+func normalizeVisibility(v string) string {
+	if v == "public" {
+		return "public"
+	}
+	return "private"
+}
+
 // ---- Tool Implementations ----
 
 func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteContextInput) (*WriteContextResult, error) {
@@ -501,14 +521,16 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	sourceLinesJSON := encodeSourceLines(in.SourceLines)
 	vec := pgvector.NewVector(emb)
 
+	vis := normalizeVisibility(in.Visibility)
+
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at
 	`, nullStr(projectID), scope, nullStr(in.AgentID), nullStr(in.OrgID),
-		nullInjectAudience(effectiveInjectAudience), chunkType,
+		nullInjectAudience(effectiveInjectAudience), vis, chunkType,
 		in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
@@ -532,6 +554,7 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 		ChunkType:    chunkType,
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -579,7 +602,8 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 			COALESCE(
 				(SELECT MAX(cr.created_at) FROM context_reviews cr WHERE cr.chunk_id = cc.id),
 				cc.updated_at
-			) AS last_review_at`
+			) AS last_review_at,
+			cc.visibility`
 
 	var rows pgxRows
 	if in.QueryKey != "" {
@@ -664,7 +688,7 @@ func (t *Tools) ReadContext(ctx context.Context, projectID string, in ReadContex
 	}
 
 	query := `
-		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.inject_audience, cc.chunk_type,
+		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.inject_audience, cc.visibility, cc.chunk_type,
 		       cc.query_key, cc.title, cc.content, cc.embedding::text, cc.source_file, cc.source_lines,
 		       cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
@@ -802,6 +826,11 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 		args = append(args, *in.InjectAudience)
 		argIdx++
 	}
+	if in.Visibility != nil {
+		setClauses = append(setClauses, fmt.Sprintf("visibility = $%d", argIdx))
+		args = append(args, normalizeVisibility(*in.Visibility))
+		argIdx++
+	}
 
 	// WHERE args
 	args = append(args, in.ID, projectID)
@@ -896,7 +925,8 @@ func (t *Tools) CompactContext(ctx context.Context, projectID string, in Compact
 		SELECT cc.id, cc.project_id, cc.query_key, cc.title, cc.content, cc.embedding::text, cc.source_file,
 		       cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version,
-		       COALESCE(1 - (cc.embedding <=> $1), 0) AS score
+		       COALESCE(1 - (cc.embedding <=> $1), 0) AS score,
+		       cc.visibility
 		FROM context_chunks cc
 		WHERE TRUE
 		%s %s %s
@@ -1047,6 +1077,7 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	}
 
 	effectiveIA := effectiveInjectAudience(in.InjectAudience, defaults.DefaultInjectAudience)
+	vis := normalizeVisibility(in.Visibility)
 
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
@@ -1063,10 +1094,10 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, $1, $2, $3, 'IDENTITY', $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, $1, $2, $3, $4, $5, 'IDENTITY', $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, created_at
-	`, defaults.DefaultScope, in.AgentID, nullInjectAudience(effectiveIA), in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, in.AgentID, nullInjectAudience(effectiveIA), vis, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1089,6 +1120,7 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 		ChunkType:    "IDENTITY",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1110,6 +1142,7 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	}
 
 	effectiveIA := effectiveInjectAudience(in.InjectAudience, defaults.DefaultInjectAudience)
+	vis := normalizeVisibility(in.Visibility)
 
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
@@ -1126,10 +1159,10 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, $1, $2, NULL, $3, 'MEMORY', $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, $1, $2, NULL, $3, $4, 'MEMORY', $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at
-	`, defaults.DefaultScope, in.AgentID, nullInjectAudience(effectiveIA), in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, in.AgentID, nullInjectAudience(effectiveIA), vis, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1152,6 +1185,7 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 		ChunkType:    "MEMORY",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1182,6 +1216,7 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	}
 
 	effectiveIA := effectiveInjectAudience(in.InjectAudience, defaults.DefaultInjectAudience)
+	vis := normalizeVisibility(in.Visibility)
 
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
@@ -1198,10 +1233,10 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES ($1, $2, NULL, NULL, $3, 'KNOWLEDGE', $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, $2, NULL, NULL, $3, $4, 'KNOWLEDGE', $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at
-	`, projectID, defaults.DefaultScope, nullInjectAudience(effectiveIA), in.QueryKey, in.Title, contentJSON, vec,
+	`, projectID, defaults.DefaultScope, nullInjectAudience(effectiveIA), vis, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1224,6 +1259,7 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1254,6 +1290,7 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	}
 
 	effectiveIA := effectiveInjectAudience(in.InjectAudience, defaults.DefaultInjectAudience)
+	vis := normalizeVisibility(in.Visibility)
 
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
@@ -1270,10 +1307,10 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES ($1, $2, NULL, NULL, $3, 'CONVENTION', $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, $2, NULL, NULL, $3, $4, 'CONVENTION', $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at
-	`, projectID, defaults.DefaultScope, nullInjectAudience(effectiveIA), in.QueryKey, in.Title, contentJSON, vec,
+	`, projectID, defaults.DefaultScope, nullInjectAudience(effectiveIA), vis, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1296,6 +1333,7 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 		ChunkType:    "CONVENTION",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1317,6 +1355,7 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	}
 
 	effectiveIA := effectiveInjectAudience(in.InjectAudience, defaults.DefaultInjectAudience)
+	vis := normalizeVisibility(in.Visibility)
 
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
@@ -1333,10 +1372,10 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, 'ORG', NULL, $1, $2, 'KNOWLEDGE', $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, 'ORG', NULL, $1, $2, $3, 'KNOWLEDGE', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, orgID, nullInjectAudience(effectiveIA), in.QueryKey, in.Title, contentJSON, vec,
+	`, orgID, nullInjectAudience(effectiveIA), vis, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1359,6 +1398,7 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1384,6 +1424,7 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	}
 
 	effectiveIA := effectiveInjectAudience(in.InjectAudience, defaults.DefaultInjectAudience)
+	vis := normalizeVisibility(in.Visibility)
 
 	emb, err := t.embed.Embed(ctx, in.Content)
 	if err != nil {
@@ -1400,10 +1441,10 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, 'ORG', NULL, $1, $2, 'PRINCIPLE', $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, 'ORG', NULL, $1, $2, $3, 'PRINCIPLE', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, orgID, nullInjectAudience(effectiveIA), in.QueryKey, in.Title, contentJSON, vec,
+	`, orgID, nullInjectAudience(effectiveIA), vis, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1426,6 +1467,7 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 		ChunkType:    "PRINCIPLE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1467,6 +1509,8 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 	if in.InjectAudience != nil {
 		effectiveInjectAudience = resolveInjectAudience(in.InjectAudience)
 	}
+
+	vis := normalizeVisibility(in.Visibility)
 
 	// Validate required IDs based on effective scope
 	var effectiveProjectID *string
@@ -1517,11 +1561,11 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, visibility, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at
 	`, effectiveProjectID, effectiveScope, effectiveAgentID, effectiveOrgID,
-		nullInjectAudience(effectiveInjectAudience), in.Type,
+		nullInjectAudience(effectiveInjectAudience), vis, in.Type,
 		in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
@@ -1545,6 +1589,7 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 		ChunkType:    in.Type,
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
+		Visibility:   vis,
 		CreatedAt:    createdAt,
 	}, nil
 }
@@ -1771,6 +1816,7 @@ func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
 		&chunk.AgentID,
 		&chunk.OrgID,
 		&iaRaw,
+		&chunk.Visibility,
 		&chunk.ChunkType,
 		&chunk.QueryKey,
 		&chunk.Title,
@@ -1818,6 +1864,7 @@ func scanChunkResultRow(row pgxScanner) (models.ContextChunk, int, float64, erro
 		&chunk.UpdatedAt,
 		&version,
 		&score,
+		&chunk.Visibility,
 	)
 	if err == nil && embeddingText != nil {
 		err = chunk.Embedding.Parse(*embeddingText)
@@ -1850,6 +1897,7 @@ func scanChunkSearchRow(row pgxScanner) (models.ContextChunk, int, float64, time
 		&version,
 		&score,
 		&lastReviewAt,
+		&chunk.Visibility,
 	)
 	if err == nil && embeddingText != nil {
 		err = chunk.Embedding.Parse(*embeddingText)
@@ -1872,6 +1920,7 @@ func chunkResultFromModel(chunk models.ContextChunk, version int, score float64)
 		SourceLines: decodeSourceLines(chunk.SourceLines),
 		Gotchas:     decodeStringSlice(chunk.Gotchas),
 		Related:     decodeStringSlice(chunk.Related),
+		Visibility:  chunk.Visibility,
 		Score:       score,
 		Version:     version,
 		CreatedAt:   chunk.CreatedAt,
@@ -1886,5 +1935,6 @@ func readContextResultFromModel(chunk models.ContextChunk, version int) ChunkRes
 	result.OrgID = chunk.OrgID
 	result.InjectAudience = chunk.InjectAudience
 	result.ChunkType = chunk.ChunkType
+	result.Visibility = chunk.Visibility
 	return result
 }

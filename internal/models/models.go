@@ -104,31 +104,18 @@ type APIKey struct {
 
 // ContextChunk represents a row in the context_chunks table.
 //
-// Scope model:
-//
-//	PROJECT (default): shared project knowledge — project_id required.
-//	AGENT:             private agent memory — agent_id required, project_id optional.
-//	ORG:               org-wide memory — org_id required, project_id NULL.
-//
-// InjectAudience:
-//
-//	nil:       retrieved on demand via semantic search.
-//	non-nil:   surfaced automatically if MatchesSession returns true.
-//
-// ChunkType:
-//
-//	IDENTITY:      agent identity and core traits (AGENT scope, inject_audience all)
-//	MEMORY:        episodic context and task memory (AGENT scope, SURFACE)
-//	KNOWLEDGE:     facts and established patterns (PROJECT scope, KEEP)
-//	CONVENTION:    coding standards and patterns (PROJECT scope, inject_audience all, KEEP)
-//	PRINCIPLE:     org-level immutable truths (ORG scope, inject_audience all, KEEP)
-//	DECISION:      made decisions with reasoning (PROJECT scope, KEEP)
-//	RESEARCH:      investigation findings (PROJECT scope, SURFACE)
-//	PLAN:          planned work and approaches (PROJECT scope, SURFACE)
-//	SPEC:          specification documents (PROJECT scope, SURFACE)
-//	IMPLEMENTATION: code-level notes (PROJECT scope, SURFACE)
-//	CONSTRAINT:    hard limits and requirements (PROJECT scope, inject_audience all, KEEP)
-//	LESSON:        learned lessons (PROJECT scope, SURFACE)
+//	IDENTITY:       agent identity and traits (AGENT scope, never injected)
+//	MEMORY:         episodic context (AGENT scope, never injected)
+//	KNOWLEDGE:      facts and documentation (PROJECT scope, default)
+//	DECISION:       architectural decisions (PROJECT scope)
+//	RESEARCH:       research findings (PROJECT scope)
+//	PLAN:           plans and roadmaps (PROJECT scope)
+//	SPEC:           specs and designs (PROJECT scope)
+//	IMPLEMENTATION: implementation notes (PROJECT scope)
+//	CONVENTION:     coding standards (PROJECT scope, inject_audience all)
+//	PRINCIPLE:      principles (ORG scope, promoted by human, inject_audience all)
+//	CONSTRAINT:     hard limits and requirements (PROJECT scope, inject_audience all, KEEP)
+//	LESSON:         learned lessons (PROJECT scope, SURFACE)
 //	Org-specific types: fully CRUD-able
 //	Global types (org_id=NULL): immutable — PATCH/DELETE return 403
 type ContextChunk struct {
@@ -143,6 +130,9 @@ type ContextChunk struct {
 	OrgID *string `json:"org_id,omitempty" db:"org_id"`
 	// InjectAudience: JSONB targeting spec for ambient injection. NULL = on-demand only.
 	InjectAudience *InjectAudience `json:"inject_audience" db:"inject_audience"`
+	// Visibility controls public hub discoverability. "private" (default) | "public".
+	// Public chunks are discoverable on the hub but never auto-injected.
+	Visibility     string          `json:"visibility" db:"visibility"`
 	// ChunkType: IDENTITY | MEMORY | KNOWLEDGE | CONVENTION | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON. Defaults to KNOWLEDGE.
 	ChunkType      string          `json:"chunk_type" db:"chunk_type"`
 	QueryKey       string          `json:"query_key" db:"query_key"`
