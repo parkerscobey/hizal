@@ -1810,3 +1810,229 @@ func TestLoadAPIKeyScope_DispatchCoverage(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// ─── WNW-102: effectiveInjectAudience + write tool inputs ─────────────────
+
+func TestEffectiveInjectAudience(t *testing.T) {
+	t.Parallel()
+
+	allAgents := &models.InjectAudience{Rules: []models.InjectAudienceRule{{All: true}}}
+	devOnly := &models.InjectAudience{Rules: []models.InjectAudienceRule{{AgentTypes: []string{"dev"}}}}
+
+	t.Run("override wins when provided", func(t *testing.T) {
+		t.Parallel()
+		got := effectiveInjectAudience(devOnly, allAgents)
+		if got != devOnly {
+			t.Errorf("expected override to be returned, got %+v", got)
+		}
+		if len(got.Rules) != 1 || got.Rules[0].AgentTypes[0] != "dev" {
+			t.Errorf("wrong rule content: %+v", got.Rules)
+		}
+	})
+
+	t.Run("default used when override is nil", func(t *testing.T) {
+		t.Parallel()
+		got := effectiveInjectAudience(nil, allAgents)
+		if got != allAgents {
+			t.Errorf("expected default to be returned, got %+v", got)
+		}
+	})
+
+	t.Run("nil returned when both nil", func(t *testing.T) {
+		t.Parallel()
+		got := effectiveInjectAudience(nil, nil)
+		if got != nil {
+			t.Errorf("expected nil, got %+v", got)
+		}
+	})
+
+	t.Run("override used even when it has empty rules", func(t *testing.T) {
+		t.Parallel()
+		emptyOverride := &models.InjectAudience{Rules: []models.InjectAudienceRule{}}
+		got := effectiveInjectAudience(emptyOverride, allAgents)
+		if got != emptyOverride {
+			t.Errorf("expected empty override to be returned (not default), got %+v", got)
+		}
+	})
+}
+
+func TestNullInjectAudience(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil returns nil interface", func(t *testing.T) {
+		t.Parallel()
+		result := nullInjectAudience(nil)
+		if result != nil {
+			t.Errorf("nullInjectAudience(nil) = %v, want nil", result)
+		}
+	})
+
+	t.Run("all-agents rule serialises to JSON string", func(t *testing.T) {
+		t.Parallel()
+		ia := &models.InjectAudience{Rules: []models.InjectAudienceRule{{All: true}}}
+		result := nullInjectAudience(ia)
+		s, ok := result.(string)
+		if !ok {
+			t.Fatalf("nullInjectAudience returned %T, want string", result)
+		}
+		if !strings.Contains(s, `"all":true`) {
+			t.Errorf("serialised JSON = %q, want to contain \"all\":true", s)
+		}
+	})
+
+	t.Run("agent_types rule serialises correctly", func(t *testing.T) {
+		t.Parallel()
+		ia := &models.InjectAudience{
+			Rules: []models.InjectAudienceRule{{AgentTypes: []string{"dev", "orchestrator"}}},
+		}
+		result := nullInjectAudience(ia)
+		s, ok := result.(string)
+		if !ok {
+			t.Fatalf("nullInjectAudience returned %T, want string", result)
+		}
+		if !strings.Contains(s, "agent_types") {
+			t.Errorf("serialised JSON = %q, want to contain 'agent_types'", s)
+		}
+	})
+}
+
+func TestWriteToolInputs_InjectAudienceField(t *testing.T) {
+	t.Parallel()
+
+	ia := &models.InjectAudience{Rules: []models.InjectAudienceRule{{All: true}}}
+
+	t.Run("WriteIdentityInput accepts inject_audience override", func(t *testing.T) {
+		t.Parallel()
+		in := WriteIdentityInput{
+			AgentID:        "agent-1",
+			QueryKey:       "identity-key",
+			Title:          "My Identity",
+			Content:        "I am a dev agent.",
+			InjectAudience: ia,
+		}
+		if in.InjectAudience == nil {
+			t.Error("InjectAudience should be set")
+		}
+		if !in.InjectAudience.Rules[0].All {
+			t.Error("expected All=true rule")
+		}
+	})
+
+	t.Run("WriteMemoryInput accepts inject_audience override", func(t *testing.T) {
+		t.Parallel()
+		in := WriteMemoryInput{
+			AgentID:        "agent-1",
+			QueryKey:       "mem-key",
+			Title:          "Memory",
+			Content:        "I remembered this.",
+			InjectAudience: ia,
+		}
+		if in.InjectAudience == nil {
+			t.Error("InjectAudience should be set")
+		}
+	})
+
+	t.Run("WriteKnowledgeInput accepts inject_audience override", func(t *testing.T) {
+		t.Parallel()
+		in := WriteKnowledgeInput{
+			ProjectID:      "proj-1",
+			QueryKey:       "know-key",
+			Title:          "Knowledge",
+			Content:        "Important fact.",
+			InjectAudience: ia,
+		}
+		if in.InjectAudience == nil {
+			t.Error("InjectAudience should be set")
+		}
+	})
+
+	t.Run("WriteConventionInput accepts inject_audience override", func(t *testing.T) {
+		t.Parallel()
+		in := WriteConventionInput{
+			ProjectID:      "proj-1",
+			QueryKey:       "conv-key",
+			Title:          "Convention",
+			Content:        "Always use tabs.",
+			InjectAudience: ia,
+		}
+		if in.InjectAudience == nil {
+			t.Error("InjectAudience should be set")
+		}
+	})
+
+	t.Run("WriteOrgKnowledgeInput accepts inject_audience override", func(t *testing.T) {
+		t.Parallel()
+		in := WriteOrgKnowledgeInput{
+			OrgID:          "org-1",
+			QueryKey:       "orgknow-key",
+			Title:          "Org Knowledge",
+			Content:        "Org-wide fact.",
+			InjectAudience: ia,
+		}
+		if in.InjectAudience == nil {
+			t.Error("InjectAudience should be set")
+		}
+	})
+
+	t.Run("StorePrincipleInput accepts inject_audience override", func(t *testing.T) {
+		t.Parallel()
+		in := StorePrincipleInput{
+			OrgID:          "org-1",
+			QueryKey:       "principle-key",
+			Title:          "Principle",
+			Content:        "Always write tests.",
+			InjectAudience: ia,
+		}
+		if in.InjectAudience == nil {
+			t.Error("InjectAudience should be set")
+		}
+	})
+
+	t.Run("inject_audience is nil by default (no override = use chunk type default)", func(t *testing.T) {
+		t.Parallel()
+		in := WriteMemoryInput{
+			AgentID:  "agent-1",
+			QueryKey: "mem-key",
+			Title:    "Memory",
+			Content:  "No override.",
+		}
+		if in.InjectAudience != nil {
+			t.Errorf("InjectAudience should be nil by default, got %+v", in.InjectAudience)
+		}
+	})
+}
+
+func TestEffectiveInjectAudience_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	// Override with multi-rule audience, verify it passes through unmodified.
+	multiRule := &models.InjectAudience{
+		Rules: []models.InjectAudienceRule{
+			{AgentTypes: []string{"dev"}, LifecycleTypes: []string{"standard"}},
+			{All: true},
+		},
+	}
+	defaultIA := &models.InjectAudience{
+		Rules: []models.InjectAudienceRule{{All: true}},
+	}
+
+	got := effectiveInjectAudience(multiRule, defaultIA)
+	if len(got.Rules) != 2 {
+		t.Errorf("expected 2 rules, got %d", len(got.Rules))
+	}
+	if got.Rules[0].AgentTypes[0] != "dev" {
+		t.Errorf("first rule agent_types[0] = %q, want 'dev'", got.Rules[0].AgentTypes[0])
+	}
+	if got.Rules[0].LifecycleTypes[0] != "standard" {
+		t.Errorf("first rule lifecycle_types[0] = %q, want 'standard'", got.Rules[0].LifecycleTypes[0])
+	}
+	if !got.Rules[1].All {
+		t.Error("second rule All should be true")
+	}
+
+	// Confirm default is returned unchanged when no override.
+	got2 := effectiveInjectAudience(nil, defaultIA)
+	if !got2.Rules[0].All {
+		t.Error("default rule All should be true")
+	}
+}

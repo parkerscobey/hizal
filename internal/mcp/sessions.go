@@ -282,6 +282,20 @@ func (t *Tools) fetchInjectAudienceCandidates(
 	return chunks, truncated, nil
 }
 
+func (t *Tools) cacheInjectSet(ctx context.Context, sessionID string, chunks []InjectedChunk) {
+	if len(chunks) == 0 {
+		return
+	}
+	chunkIDs := make([]string, len(chunks))
+	for i, c := range chunks {
+		chunkIDs[i] = c.ID
+	}
+	injectSetJSON, _ := json.Marshal(chunkIDs)
+	_, _ = t.pool.Exec(ctx, `
+		UPDATE sessions SET inject_set = $1, updated_at = NOW() WHERE id = $2
+	`, injectSetJSON, sessionID)
+}
+
 func (t *Tools) incrementSessionActivity(agentID, orgID string, isWrite bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -353,6 +367,8 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 	if err != nil {
 		return nil, err
 	}
+
+	t.cacheInjectSet(ctx, sessionID, chunks)
 
 	result := &StartSessionResult{
 		SessionID:      sessionID,
@@ -445,6 +461,8 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 	if err != nil {
 		return nil, err
 	}
+
+	t.cacheInjectSet(ctx, sess.ID, chunks)
 
 	return &ResumeSessionResult{
 		SessionID:      sess.ID,
@@ -548,14 +566,15 @@ func (t *Tools) EndSession(ctx context.Context, orgID string, in EndSessionInput
 
 // GetActiveSessionResult is returned by GetActiveSession.
 type GetActiveSessionResult struct {
-	SessionID     *string `json:"session_id"`
-	Status        string  `json:"status"` // "active" | "none"
-	LifecycleSlug *string `json:"lifecycle_slug,omitempty"`
-	FocusTask     *string `json:"focus_task,omitempty"`
-	ExpiresAt     *string `json:"expires_at,omitempty"`
-	ChunksWritten int     `json:"chunks_written"`
-	ResumeCount   int     `json:"resume_count"`
-	Message       string  `json:"message"`
+	SessionID     *string  `json:"session_id"`
+	Status        string   `json:"status"` // "active" | "none"
+	LifecycleSlug *string  `json:"lifecycle_slug,omitempty"`
+	FocusTask     *string  `json:"focus_task,omitempty"`
+	ExpiresAt     *string  `json:"expires_at,omitempty"`
+	ChunksWritten int      `json:"chunks_written"`
+	ResumeCount   int      `json:"resume_count"`
+	InjectSet     []string `json:"inject_set,omitempty"`
+	Message       string   `json:"message"`
 }
 
 // GetActiveSession returns the calling agent's current active session, derived
@@ -572,15 +591,16 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 		expiresAt     string
 		chunksWritten int
 		resumeCount   int
+		injectSet     []string
 	)
 
 	err := t.pool.QueryRow(ctx, `
-		SELECT s.id, sl.slug, s.focus_task, s.expires_at, s.chunks_written, s.resume_count
+		SELECT s.id, sl.slug, s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
 		FROM sessions s
 		JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
 		WHERE s.agent_id = $1 AND s.status = 'active'
 		LIMIT 1
-	`, agentID).Scan(&sessionID, &lifecycleSlug, &focusTask, &expiresAt, &chunksWritten, &resumeCount)
+	`, agentID).Scan(&sessionID, &lifecycleSlug, &focusTask, &expiresAt, &chunksWritten, &resumeCount, &injectSet)
 	if err != nil {
 		// No active session found.
 		return &GetActiveSessionResult{
@@ -597,6 +617,7 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 		ExpiresAt:     &expiresAt,
 		ChunksWritten: chunksWritten,
 		ResumeCount:   resumeCount,
+		InjectSet:     injectSet,
 		Message:       "active session found — use this session_id to continue; call resume_session to extend TTL if needed",
 	}, nil
 }
