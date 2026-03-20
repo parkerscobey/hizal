@@ -256,7 +256,7 @@ func (h *SessionHandlers) GetSessionConsolidationChunks(w http.ResponseWriter, r
 	}
 
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT cc.id, cc.query_key, cc.title, cc.scope, cc.chunk_type, cc.always_inject, cc.created_at
+		SELECT cc.id, cc.query_key, cc.title, cc.scope, cc.chunk_type, cc.created_at
 		FROM context_chunks cc
 		JOIN chunk_types ct ON ct.slug = cc.chunk_type
 		WHERE cc.agent_id = (SELECT agent_id FROM sessions WHERE id = $1 AND org_id = $2)
@@ -272,20 +272,19 @@ func (h *SessionHandlers) GetSessionConsolidationChunks(w http.ResponseWriter, r
 	defer rows.Close()
 
 	type chunkSummary struct {
-		ID           string `json:"id"`
-		QueryKey     string `json:"query_key"`
-		Title        string `json:"title"`
-		Scope        string `json:"scope"`
-		ChunkType    string `json:"chunk_type"`
-		AlwaysInject bool   `json:"always_inject"`
-		CreatedAt    string `json:"created_at"`
+		ID        string  `json:"id"`
+		QueryKey  string  `json:"query_key"`
+		Title     string  `json:"title"`
+		Scope     string  `json:"scope"`
+		ChunkType string  `json:"chunk_type"`
+		CreatedAt string  `json:"created_at"`
 	}
 
 	chunks := []chunkSummary{}
 	for rows.Next() {
 		var c chunkSummary
 		var createdAt interface{}
-		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &c.Scope, &c.ChunkType, &c.AlwaysInject, &createdAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &c.Scope, &c.ChunkType, &createdAt); err != nil {
 			writeError(w, http.StatusInternalServerError, "SCAN_FAILED", err.Error())
 			return
 		}
@@ -345,14 +344,14 @@ func (h *SessionHandlers) ConsolidateSession(w http.ResponseWriter, r *http.Requ
 			if a.PromoteToPrinciple {
 				_, err = h.pool.Exec(r.Context(), `
 					UPDATE context_chunks
-					SET scope = 'ORG', chunk_type = 'PRINCIPLE', always_inject = TRUE,
+					SET scope = 'ORG', chunk_type = 'PRINCIPLE', inject_audience = '{"rules":[{"all":true}]}'::jsonb,
 					    project_id = NULL, updated_at = NOW()
 					WHERE id = $1
 				`, a.ChunkID)
 			} else {
 				_, err = h.pool.Exec(r.Context(), `
 					UPDATE context_chunks
-					SET scope = 'PROJECT', chunk_type = 'KNOWLEDGE', always_inject = FALSE,
+					SET scope = 'PROJECT', chunk_type = 'KNOWLEDGE', inject_audience = NULL,
 					    project_id = $2, updated_at = NOW()
 					WHERE id = $1
 				`, a.ChunkID, projectID)

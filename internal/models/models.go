@@ -110,24 +110,24 @@ type APIKey struct {
 //	AGENT:             private agent memory — agent_id required, project_id optional.
 //	ORG:               org-wide memory — org_id required, project_id NULL.
 //
-// AlwaysInject:
+// InjectAudience:
 //
-//	false: retrieved on demand via semantic search.
-//	true:  surfaced automatically as ambient baseline layer.
+//	nil:       retrieved on demand via semantic search.
+//	non-nil:   surfaced automatically if MatchesSession returns true.
 //
 // ChunkType:
 //
-//	IDENTITY:      agent identity and core traits (AGENT scope, always_inject=true)
+//	IDENTITY:      agent identity and core traits (AGENT scope, inject_audience all)
 //	MEMORY:        episodic context and task memory (AGENT scope, SURFACE)
 //	KNOWLEDGE:     facts and established patterns (PROJECT scope, KEEP)
-//	CONVENTION:    coding standards and patterns (PROJECT scope, always_inject=true, KEEP)
-//	PRINCIPLE:     org-level immutable truths (ORG scope, always_inject=true, KEEP)
+//	CONVENTION:    coding standards and patterns (PROJECT scope, inject_audience all, KEEP)
+//	PRINCIPLE:     org-level immutable truths (ORG scope, inject_audience all, KEEP)
 //	DECISION:      made decisions with reasoning (PROJECT scope, KEEP)
 //	RESEARCH:      investigation findings (PROJECT scope, SURFACE)
 //	PLAN:          planned work and approaches (PROJECT scope, SURFACE)
 //	SPEC:          specification documents (PROJECT scope, SURFACE)
 //	IMPLEMENTATION: code-level notes (PROJECT scope, SURFACE)
-//	CONSTRAINT:    hard limits and requirements (PROJECT scope, always_inject=true, KEEP)
+//	CONSTRAINT:    hard limits and requirements (PROJECT scope, inject_audience all, KEEP)
 //	LESSON:        learned lessons (PROJECT scope, SURFACE)
 //	Org-specific types: fully CRUD-able
 //	Global types (org_id=NULL): immutable — PATCH/DELETE return 403
@@ -141,8 +141,8 @@ type ContextChunk struct {
 	AgentID *string `json:"agent_id,omitempty" db:"agent_id"`
 	// OrgID is set for ORG-scoped chunks.
 	OrgID *string `json:"org_id,omitempty" db:"org_id"`
-	// AlwaysInject: true = ambient baseline, false = on-demand search.
-	AlwaysInject bool `json:"always_inject" db:"always_inject"`
+	// InjectAudience: JSONB targeting spec for ambient injection. NULL = on-demand only.
+	InjectAudience *InjectAudience `json:"inject_audience" db:"inject_audience"`
 	// ChunkType: IDENTITY | MEMORY | KNOWLEDGE | CONVENTION | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON. Defaults to KNOWLEDGE.
 	ChunkType      string          `json:"chunk_type" db:"chunk_type"`
 	QueryKey       string          `json:"query_key" db:"query_key"`
@@ -228,18 +228,18 @@ type AgentType struct {
 // org_id = NULL means a global preset. Global presets are immutable.
 //
 // The 12 canonical global types are:
-//   - IDENTITY:    AGENT scope, always_inject=true, consolidation=KEEP
-//   - MEMORY:      AGENT scope, always_inject=false, consolidation=SURFACE
-//   - KNOWLEDGE:   PROJECT scope, always_inject=false, consolidation=KEEP
-//   - CONVENTION:  PROJECT scope, always_inject=true, consolidation=KEEP
-//   - PRINCIPLE:   ORG scope, always_inject=true, consolidation=KEEP
-//   - DECISION:   PROJECT scope, always_inject=false, consolidation=KEEP
-//   - RESEARCH:    PROJECT scope, always_inject=false, consolidation=SURFACE
-//   - PLAN:        PROJECT scope, always_inject=false, consolidation=SURFACE
-//   - SPEC:        PROJECT scope, always_inject=false, consolidation=SURFACE
-//   - IMPLEMENTATION: PROJECT scope, always_inject=false, consolidation=SURFACE
-//   - CONSTRAINT:  PROJECT scope, always_inject=true, consolidation=KEEP
-//   - LESSON:      PROJECT scope, always_inject=false, consolidation=SURFACE
+//   - IDENTITY:    AGENT scope, inject_audience all, consolidation=KEEP
+//   - MEMORY:      AGENT scope, inject_audience nil, consolidation=SURFACE
+//   - KNOWLEDGE:   PROJECT scope, inject_audience nil, consolidation=KEEP
+//   - CONVENTION:  PROJECT scope, inject_audience all, consolidation=KEEP
+//   - PRINCIPLE:   ORG scope, inject_audience all, consolidation=KEEP
+//   - DECISION:   PROJECT scope, inject_audience nil, consolidation=KEEP
+//   - RESEARCH:    PROJECT scope, inject_audience nil, consolidation=SURFACE
+//   - PLAN:        PROJECT scope, inject_audience nil, consolidation=SURFACE
+//   - SPEC:        PROJECT scope, inject_audience nil, consolidation=SURFACE
+//   - IMPLEMENTATION: PROJECT scope, inject_audience nil, consolidation=SURFACE
+//   - CONSTRAINT:  PROJECT scope, inject_audience all, consolidation=KEEP
+//   - LESSON:      PROJECT scope, inject_audience nil, consolidation=SURFACE
 //
 // Org-specific types (org_id != NULL) are fully CRUD-able.
 type ChunkType struct {
@@ -249,7 +249,7 @@ type ChunkType struct {
 	Slug                  string    `json:"slug" db:"slug"`
 	Description           *string   `json:"description,omitempty" db:"description"`
 	DefaultScope          string    `json:"default_scope" db:"default_scope"`
-	DefaultAlwaysInject   bool      `json:"default_always_inject" db:"default_always_inject"`
+	DefaultInjectAudience *InjectAudience `json:"default_inject_audience" db:"default_inject_audience"`
 	ConsolidationBehavior string    `json:"consolidation_behavior" db:"consolidation_behavior"`
 	CreatedAt             time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at" db:"updated_at"`

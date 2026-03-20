@@ -98,19 +98,19 @@ type StorePrincipleInput struct {
 }
 
 type WriteChunkInput struct {
-	Type         string   `json:"type"`
-	QueryKey     string   `json:"query_key"`
-	Title        string   `json:"title"`
-	Content      string   `json:"content"`
-	ProjectID    string   `json:"project_id,omitempty"`
-	AgentID      string   `json:"agent_id,omitempty"`
-	OrgID        string   `json:"org_id,omitempty"`
-	AlwaysInject *bool    `json:"always_inject,omitempty"`
-	Scope        string   `json:"scope,omitempty"`
-	SourceFile   string   `json:"source_file,omitempty"`
-	SourceLines  [2]int   `json:"source_lines,omitempty"`
-	Gotchas      []string `json:"gotchas,omitempty"`
-	Related      []string `json:"related,omitempty"`
+	Type            string           `json:"type"`
+	QueryKey        string           `json:"query_key"`
+	Title           string           `json:"title"`
+	Content         string           `json:"content"`
+	ProjectID       string           `json:"project_id,omitempty"`
+	AgentID         string           `json:"agent_id,omitempty"`
+	OrgID           string           `json:"org_id,omitempty"`
+	InjectAudience  *json.RawMessage `json:"inject_audience,omitempty"`
+	Scope           string           `json:"scope,omitempty"`
+	SourceFile      string           `json:"source_file,omitempty"`
+	SourceLines     [2]int           `json:"source_lines,omitempty"`
+	Gotchas         []string         `json:"gotchas,omitempty"`
+	Related         []string         `json:"related,omitempty"`
 }
 
 // computeFreshness returns a score multiplier in [FreshnessMin, 1.0] based on
@@ -151,8 +151,8 @@ type WriteContextInput struct {
 	AgentID string `json:"agent_id,omitempty"`
 	// OrgID is required when Scope is ORG.
 	OrgID string `json:"org_id,omitempty"`
-	// AlwaysInject: true = ambient baseline, false = on-demand. Defaults to false.
-	AlwaysInject bool `json:"always_inject,omitempty"`
+	// InjectAudience: JSONB targeting spec. nil = on-demand only.
+	InjectAudience *json.RawMessage `json:"inject_audience,omitempty"`
 	// ChunkType: IDENTITY | MEMORY | KNOWLEDGE | CONVENTION | PRINCIPLE | DECISION | RESEARCH | PLAN | SPEC | IMPLEMENTATION | CONSTRAINT | LESSON. Defaults to KNOWLEDGE. Must be a valid type for the org (global or org-specific).
 	ChunkType   string   `json:"chunk_type,omitempty"`
 	QueryKey    string   `json:"query_key"`
@@ -165,13 +165,13 @@ type WriteContextInput struct {
 }
 
 type WriteContextResult struct {
-	ID           string    `json:"id"`
-	Scope        string    `json:"scope"`
-	AlwaysInject bool      `json:"always_inject"`
-	ChunkType    string    `json:"chunk_type"`
-	QueryKey     string    `json:"query_key"`
-	Title        string    `json:"title"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID              string                  `json:"id"`
+	Scope           string                  `json:"scope"`
+	InjectAudience  *models.InjectAudience   `json:"inject_audience"`
+	ChunkType       string                  `json:"chunk_type"`
+	QueryKey        string                  `json:"query_key"`
+	Title           string                  `json:"title"`
+	CreatedAt       time.Time               `json:"created_at"`
 }
 
 type SearchContextInput struct {
@@ -209,7 +209,7 @@ type ChunkResult struct {
 	Scope        string        `json:"scope"`
 	AgentID      *string       `json:"agent_id,omitempty"`
 	OrgID        *string       `json:"org_id,omitempty"`
-	AlwaysInject bool          `json:"always_inject"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
 	ChunkType    string        `json:"chunk_type"`
 	QueryKey     string        `json:"query_key"`
 	Title        string        `json:"title"`
@@ -385,21 +385,28 @@ func isValidChunkType(ctx context.Context, pool *pgxpool.Pool, orgID string, chu
 }
 
 type ChunkTypeDefaults struct {
-	DefaultScope        string
-	DefaultAlwaysInject bool
+	DefaultScope             string
+	DefaultInjectAudience    *models.InjectAudience
 }
 
 func resolveChunkTypeDefaults(ctx context.Context, pool *pgxpool.Pool, orgID *string, slug string) (ChunkTypeDefaults, error) {
 	var defaults ChunkTypeDefaults
+	var iaRaw []byte
 	err := pool.QueryRow(ctx, `
-		SELECT default_scope, default_always_inject
+		SELECT default_scope, default_inject_audience
 		FROM chunk_types
 		WHERE slug = $1 AND (org_id IS NULL OR org_id = $2)
 		ORDER BY org_id NULLS LAST
 		LIMIT 1
-	`, slug, nullStrPtr(orgID)).Scan(&defaults.DefaultScope, &defaults.DefaultAlwaysInject)
+	`, slug, nullStrPtr(orgID)).Scan(&defaults.DefaultScope, &iaRaw)
 	if err != nil {
 		return defaults, fmt.Errorf("chunk type %q not found: %w", slug, err)
+	}
+	if len(iaRaw) > 0 {
+		var ia models.InjectAudience
+		if err := json.Unmarshal(iaRaw, &ia); err == nil {
+			defaults.DefaultInjectAudience = &ia
+		}
 	}
 	return defaults, nil
 }
@@ -455,7 +462,7 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	}
 
 	// Resolve always_inject — default to false for backward compatibility.
-	alwaysInject := in.AlwaysInject
+	effectiveInjectAudience := resolveInjectAudience(in.InjectAudience)
 
 	// Resolve chunk_type — default to KNOWLEDGE.
 	chunkType := in.ChunkType
@@ -483,11 +490,11 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, created_at
 	`, nullStr(projectID), scope, nullStr(in.AgentID), nullStr(in.OrgID),
-		alwaysInject, chunkType,
+		nullInjectAudience(effectiveInjectAudience), chunkType,
 		in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
@@ -507,7 +514,7 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        scope,
-		AlwaysInject: alwaysInject,
+		InjectAudience: effectiveInjectAudience,
 		ChunkType:    chunkType,
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -643,7 +650,7 @@ func (t *Tools) ReadContext(ctx context.Context, projectID string, in ReadContex
 	}
 
 	query := `
-		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.always_inject, cc.chunk_type,
+		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.inject_audience, cc.chunk_type,
 		       cc.query_key, cc.title, cc.content, cc.embedding::text, cc.source_file, cc.source_lines,
 		       cc.gotchas, cc.related, cc.created_by_agent, cc.created_at, cc.updated_at,
 		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
@@ -1026,10 +1033,10 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
-		VALUES (NULL, $1, $2, NULL, $3, 'IDENTITY', $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		VALUES (NULL, $1, $2, $3, 'IDENTITY', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, defaults.DefaultScope, in.AgentID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, in.AgentID, defaults.DefaultInjectAudience, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1048,7 +1055,7 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        defaults.DefaultScope,
-		AlwaysInject: defaults.DefaultAlwaysInject,
+		InjectAudience: defaults.DefaultInjectAudience,
 		ChunkType:    "IDENTITY",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1087,10 +1094,10 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES (NULL, $1, $2, NULL, $3, 'MEMORY', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, defaults.DefaultScope, in.AgentID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, defaults.DefaultScope, in.AgentID, defaults.DefaultInjectAudience, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1109,7 +1116,7 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        defaults.DefaultScope,
-		AlwaysInject: defaults.DefaultAlwaysInject,
+		InjectAudience: defaults.DefaultInjectAudience,
 		ChunkType:    "MEMORY",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1157,10 +1164,10 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES ($1, $2, NULL, NULL, $3, 'KNOWLEDGE', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, projectID, defaults.DefaultScope, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, projectID, defaults.DefaultScope, defaults.DefaultInjectAudience, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1179,7 +1186,7 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        defaults.DefaultScope,
-		AlwaysInject: defaults.DefaultAlwaysInject,
+		InjectAudience: defaults.DefaultInjectAudience,
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1227,10 +1234,10 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES ($1, $2, NULL, NULL, $3, 'CONVENTION', $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at
-	`, projectID, defaults.DefaultScope, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, projectID, defaults.DefaultScope, defaults.DefaultInjectAudience, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1249,7 +1256,7 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        defaults.DefaultScope,
-		AlwaysInject: defaults.DefaultAlwaysInject,
+		InjectAudience: defaults.DefaultInjectAudience,
 		ChunkType:    "CONVENTION",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1288,10 +1295,10 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES (NULL, 'ORG', NULL, $1, $2, 'KNOWLEDGE', $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at
-	`, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, orgID, defaults.DefaultInjectAudience, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1310,7 +1317,7 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        "ORG",
-		AlwaysInject: defaults.DefaultAlwaysInject,
+		InjectAudience: defaults.DefaultInjectAudience,
 		ChunkType:    "KNOWLEDGE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1353,10 +1360,10 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES (NULL, 'ORG', NULL, $1, $2, 'PRINCIPLE', $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at
-	`, orgID, defaults.DefaultAlwaysInject, in.QueryKey, in.Title, contentJSON, vec,
+	`, orgID, defaults.DefaultInjectAudience, in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
 	if err != nil {
@@ -1375,7 +1382,7 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        "ORG",
-		AlwaysInject: defaults.DefaultAlwaysInject,
+		InjectAudience: defaults.DefaultInjectAudience,
 		ChunkType:    "PRINCIPLE",
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1415,10 +1422,10 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 		effectiveScope = defaults.DefaultScope
 	}
 
-	// Resolve always_inject — override wins, else table default
-	effectiveAlwaysInject := defaults.DefaultAlwaysInject
-	if in.AlwaysInject != nil {
-		effectiveAlwaysInject = *in.AlwaysInject
+	// Resolve inject_audience — override wins, else table default
+	effectiveInjectAudience := defaults.DefaultInjectAudience
+	if in.InjectAudience != nil {
+		effectiveInjectAudience = resolveInjectAudience(in.InjectAudience)
 	}
 
 	// Validate required IDs based on effective scope
@@ -1470,11 +1477,11 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 	var id string
 	var createdAt time.Time
 	err = pool(t).QueryRow(ctx, `
-		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, always_inject, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
+		INSERT INTO context_chunks (project_id, scope, agent_id, org_id, inject_audience, chunk_type, query_key, title, content, embedding, source_file, source_lines, gotchas, related)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, created_at
 	`, effectiveProjectID, effectiveScope, effectiveAgentID, effectiveOrgID,
-		effectiveAlwaysInject, in.Type,
+		nullInjectAudience(effectiveInjectAudience), in.Type,
 		in.QueryKey, in.Title, contentJSON, vec,
 		nullStr(in.SourceFile), sourceLinesJSON, gotchasJSON, relatedJSON).
 		Scan(&id, &createdAt)
@@ -1494,7 +1501,7 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 	return &WriteContextResult{
 		ID:           id,
 		Scope:        effectiveScope,
-		AlwaysInject: effectiveAlwaysInject,
+		InjectAudience: effectiveInjectAudience,
 		ChunkType:    in.Type,
 		QueryKey:     in.QueryKey,
 		Title:        in.Title,
@@ -1512,6 +1519,28 @@ func nullStr(s string) interface{} {
 		return nil
 	}
 	return s
+}
+
+func resolveInjectAudience(raw *json.RawMessage) *models.InjectAudience {
+	if raw == nil || len(*raw) == 0 || string(*raw) == "null" {
+		return nil
+	}
+	var ia models.InjectAudience
+	if err := json.Unmarshal(*raw, &ia); err != nil {
+		return nil
+	}
+	return &ia
+}
+
+func nullInjectAudience(ia *models.InjectAudience) interface{} {
+	if ia == nil {
+		return nil
+	}
+	b, err := json.Marshal(ia)
+	if err != nil {
+		return nil
+	}
+	return string(b)
 }
 
 func joinClauses(clauses []string) string {
@@ -1600,7 +1629,7 @@ func alwaysInjectFilter(onlyAlwaysInject bool, args []interface{}) (string, []in
 	if !onlyAlwaysInject {
 		return "", args
 	}
-	return "AND cc.always_inject = TRUE", args
+	return "AND cc.inject_audience IS NOT NULL", args
 }
 
 func applyTypeFilters(scope, chunkType string, tf models.AgentTypeFilterConfig) (effectiveScope, effectiveChunkType string) {
@@ -1694,13 +1723,14 @@ func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
 	var chunk models.ContextChunk
 	var version int
 	var embeddingText *string
+	var iaRaw []byte
 	err := row.Scan(
 		&chunk.ID,
 		&chunk.ProjectID,
 		&chunk.Scope,
 		&chunk.AgentID,
 		&chunk.OrgID,
-		&chunk.AlwaysInject,
+		&iaRaw,
 		&chunk.ChunkType,
 		&chunk.QueryKey,
 		&chunk.Title,
@@ -1717,6 +1747,12 @@ func scanChunkReadRow(row pgxScanner) (models.ContextChunk, int, error) {
 	)
 	if err == nil && embeddingText != nil {
 		err = chunk.Embedding.Parse(*embeddingText)
+	}
+	if err == nil && len(iaRaw) > 0 {
+		var ia models.InjectAudience
+		if err2 := json.Unmarshal(iaRaw, &ia); err2 == nil {
+			chunk.InjectAudience = &ia
+		}
 	}
 	return chunk, version, err
 }
@@ -1808,7 +1844,7 @@ func readContextResultFromModel(chunk models.ContextChunk, version int) ChunkRes
 	result.Scope = chunk.Scope
 	result.AgentID = chunk.AgentID
 	result.OrgID = chunk.OrgID
-	result.AlwaysInject = chunk.AlwaysInject
+	result.InjectAudience = chunk.InjectAudience
 	result.ChunkType = chunk.ChunkType
 	return result
 }

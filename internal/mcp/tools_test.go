@@ -712,8 +712,8 @@ func TestReadContextByQueryKey(t *testing.T) {
 	previousContent := string(encodeContent("Previous content"))
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, always_inject, chunk_type, query_key, title, content, source_lines, gotchas, related)
-		VALUES ($1, $2, 'PROJECT', true, 'SPEC', $3, $4, $5::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb)
+		INSERT INTO context_chunks (id, project_id, scope, inject_audience, chunk_type, query_key, title, content, source_lines, gotchas, related)
+		VALUES ($1, $2, 'PROJECT', '{"rules":[{"all":true}]}'::jsonb, 'SPEC', $3, $4, $5::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb)
 	`, chunkID, projectID, queryKey, "WNW-80 Spec", currentContent); err != nil {
 		t.Fatalf("insert chunk: %v", err)
 	}
@@ -738,8 +738,8 @@ func TestReadContextByQueryKey(t *testing.T) {
 		if result.Scope != "PROJECT" {
 			t.Fatalf("scope = %q, want PROJECT", result.Scope)
 		}
-		if !result.AlwaysInject {
-			t.Fatalf("always_inject = false, want true")
+		if result.InjectAudience == nil || !result.InjectAudience.IsInjectable() {
+			t.Fatalf("inject_audience = nil, want non-nil")
 		}
 		if result.ChunkType != "SPEC" {
 			t.Fatalf("chunk_type = %q, want SPEC", result.ChunkType)
@@ -766,25 +766,24 @@ func TestReadContextByQueryKey(t *testing.T) {
 	})
 }
 
-func TestWriteChunk_AlwaysInjectOverride(t *testing.T) {
+func TestWriteChunk_InjectAudienceOverride(t *testing.T) {
 	t.Parallel()
 
-	// Verify WriteChunkInput.AlwaysInject is a pointer type (for optional override)
 	in := WriteChunkInput{
 		Type:         "KNOWLEDGE",
 		QueryKey:     "test-key",
 		Title:        "Test",
 		Content:      "Test content",
-		AlwaysInject: nil,
+		InjectAudience: nil,
 	}
-	if in.AlwaysInject != nil {
-		t.Fatalf("AlwaysInject should be nil by default")
+	if in.InjectAudience != nil {
+		t.Fatalf("InjectAudience should be nil by default")
 	}
 
-	override := true
-	in.AlwaysInject = &override
-	if in.AlwaysInject == nil || !*in.AlwaysInject {
-		t.Fatalf("AlwaysInject override failed")
+	override := json.RawMessage(`{"rules":[{"all":true}]}`)
+	in.InjectAudience = &override
+	if in.InjectAudience == nil {
+		t.Fatalf("InjectAudience override failed")
 	}
 }
 
@@ -1076,8 +1075,8 @@ func TestAlwaysInjectFilter(t *testing.T) {
 		t.Parallel()
 		args := []interface{}{"vector"}
 		clause, out := alwaysInjectFilter(true, args)
-		if clause != "AND cc.always_inject = TRUE" {
-			t.Errorf("clause = %q, want 'AND cc.always_inject = TRUE'", clause)
+		if clause != "AND cc.inject_audience IS NOT NULL" {
+			t.Errorf("clause = %q, want 'AND cc.inject_audience IS NOT NULL'", clause)
 		}
 		if len(out) != 1 {
 			t.Errorf("len(args) = %d, want 1 (no new args needed)", len(out))
@@ -1233,8 +1232,8 @@ func TestAlwaysInjectFilter_SearchContext(t *testing.T) {
 		t.Parallel()
 		args := []interface{}{"vector"}
 		clause, out := alwaysInjectFilter(true, args)
-		if clause != "AND cc.always_inject = TRUE" {
-			t.Errorf("clause = %q, want 'AND cc.always_inject = TRUE'", clause)
+		if clause != "AND cc.inject_audience IS NOT NULL" {
+			t.Errorf("clause = %q, want 'AND cc.inject_audience IS NOT NULL'", clause)
 		}
 		if len(out) != 1 {
 			t.Errorf("len(args) = %d, want 1", len(out))
@@ -1261,13 +1260,13 @@ func TestReadContextResultFromModel(t *testing.T) {
 	agentID := "agent-test"
 	orgID := "org-test"
 	chunk := models.ContextChunk{
-		ID:           "chunk-read-test",
-		ProjectID:    &projID,
-		Scope:        "AGENT",
-		AgentID:      &agentID,
-		OrgID:        &orgID,
-		AlwaysInject: true,
-		ChunkType:    "MEMORY",
+		ID:              "chunk-read-test",
+		ProjectID:       &projID,
+		Scope:           "AGENT",
+		AgentID:         &agentID,
+		OrgID:           &orgID,
+		InjectAudience:  models.DefaultInjectAudienceAll(),
+		ChunkType:       "MEMORY",
 		QueryKey:     "test-read-key",
 		Title:        "Test Read",
 		Content:      encodeContent("Read content"),
@@ -1289,8 +1288,8 @@ func TestReadContextResultFromModel(t *testing.T) {
 	if result.OrgID == nil || *result.OrgID != orgID {
 		t.Errorf("OrgID = %v, want %q", result.OrgID, orgID)
 	}
-	if !result.AlwaysInject {
-		t.Errorf("AlwaysInject = false, want true")
+	if result.InjectAudience == nil || !result.InjectAudience.IsInjectable() {
+		t.Errorf("InjectAudience = nil or not injectable, want injectable")
 	}
 	if result.ChunkType != "MEMORY" {
 		t.Errorf("ChunkType = %q, want MEMORY", result.ChunkType)
@@ -1418,7 +1417,7 @@ func TestSearchContextInput_Defaults(t *testing.T) {
 func TestWriteChunkInput_Fields(t *testing.T) {
 	t.Parallel()
 
-	t.Run("AlwaysInject is nil by default", func(t *testing.T) {
+	t.Run("InjectAudience is nil by default", func(t *testing.T) {
 		t.Parallel()
 		in := WriteChunkInput{
 			Type:     "KNOWLEDGE",
@@ -1426,8 +1425,8 @@ func TestWriteChunkInput_Fields(t *testing.T) {
 			Title:    "Test",
 			Content:  "Content",
 		}
-		if in.AlwaysInject != nil {
-			t.Errorf("AlwaysInject = %v, want nil", in.AlwaysInject)
+		if in.InjectAudience != nil {
+			t.Errorf("InjectAudience = %v, want nil", in.InjectAudience)
 		}
 	})
 

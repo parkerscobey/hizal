@@ -86,10 +86,14 @@ func TestGetSessionConsolidationChunks(t *testing.T) {
 		{uuid.NewString(), "CONVENTION", "PROJECT", true},
 	}
 	for _, c := range chunks {
+		var injectVal interface{}
+		if c.inject {
+			injectVal = `{"rules":[{"all":true}]}`
+		}
 		if _, err := pool.Exec(ctx, `
-			INSERT INTO context_chunks (id, agent_id, org_id, project_id, query_key, title, scope, chunk_type, always_inject, created_at)
+			INSERT INTO context_chunks (id, agent_id, org_id, project_id, query_key, title, scope, chunk_type, inject_audience, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`, c.id, agentID, orgID, projectID, "test-key-"+c.slug, "Test "+c.slug, c.scope, c.slug, c.inject, sessionStartedAt); err != nil {
+		`, c.id, agentID, orgID, projectID, "test-key-"+c.slug, "Test "+c.slug, c.scope, c.slug, injectVal, sessionStartedAt); err != nil {
 			t.Fatalf("insert chunk %s: %v", c.slug, err)
 		}
 	}

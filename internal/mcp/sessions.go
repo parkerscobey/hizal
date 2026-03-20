@@ -153,9 +153,25 @@ func (t *Tools) resolveAgentInjectFilters(ctx context.Context, agentID string) m
 	return filters
 }
 
-func (t *Tools) fetchAlwaysInjectChunks(
+func (t *Tools) resolveAgentType(ctx context.Context, agentID string) string {
+	var typeSlug *string
+	err := t.pool.QueryRow(ctx, `
+		SELECT at.slug
+		FROM agents a
+		LEFT JOIN agent_types at ON at.id = a.type_id
+		WHERE a.id = $1
+	`, agentID).Scan(&typeSlug)
+	if err != nil || typeSlug == nil {
+		return ""
+	}
+	return *typeSlug
+}
+
+func (t *Tools) fetchInjectAudienceCandidates(
 	ctx context.Context,
 	agentID string,
+	agentType string,
+	lifecycleType *string,
 	projectID *string,
 	orgID string,
 	scopes []string,
@@ -184,9 +200,9 @@ func (t *Tools) fetchAlwaysInjectChunks(
 	}
 
 	query := fmt.Sprintf(`
-		SELECT cc.id, cc.query_key, cc.title, cc.content, cc.scope, cc.chunk_type
+		SELECT cc.id, cc.query_key, cc.title, cc.content, cc.scope, cc.chunk_type, cc.inject_audience
 		FROM context_chunks cc
-		WHERE cc.always_inject = TRUE
+		WHERE cc.inject_audience IS NOT NULL
 		  AND cc.scope = ANY($3)
 		  %s%s%s
 		  AND (
@@ -202,22 +218,47 @@ func (t *Tools) fetchAlwaysInjectChunks(
 
 	rows, err := t.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("fetchAlwaysInjectChunks: %w", err)
+		return nil, 0, fmt.Errorf("fetchInjectAudienceCandidates: %w", err)
 	}
 	defer rows.Close()
 
-	var chunks []InjectedChunk
+	var candidates []struct {
+		InjectedChunk
+		iaRaw []byte
+	}
 	for rows.Next() {
 		var c InjectedChunk
 		var rawContent []byte
-		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &rawContent, &c.Scope, &c.ChunkType); err != nil {
+		var iaRaw []byte
+		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &rawContent, &c.Scope, &c.ChunkType, &iaRaw); err != nil {
 			return nil, 0, err
 		}
 		c.Content = decodeContent(rawContent)
-		chunks = append(chunks, c)
+		candidates = append(candidates, struct {
+			InjectedChunk
+			iaRaw []byte
+		}{InjectedChunk: c, iaRaw: iaRaw})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
+	}
+
+	var chunks []InjectedChunk
+	for _, cand := range candidates {
+		if len(cand.iaRaw) == 0 {
+			continue
+		}
+		var ia models.InjectAudience
+		if err := json.Unmarshal(cand.iaRaw, &ia); err != nil {
+			continue
+		}
+		lifecycleStr := ""
+		if lifecycleType != nil {
+			lifecycleStr = *lifecycleType
+		}
+		if ia.MatchesSession(agentID, agentType, lifecycleStr, orgID, nil, nil) {
+			chunks = append(chunks, cand.InjectedChunk)
+		}
 	}
 
 	truncated := 0
@@ -262,7 +303,7 @@ func (t *Tools) incrementSessionActivity(agentID, orgID string, isWrite bool) {
 // ---- Tool Implementations ----
 
 // StartSession begins a new session for an agent.
-// Returns the session ID and all always_inject chunks for the agent's context window.
+// Returns the session ID and all matching chunks for the agent's context window.
 // Fails if the agent already has an active session (use ResumeSession instead).
 func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, in StartSessionInput) (*StartSessionResult, error) {
 	if agentID == "" {
@@ -302,8 +343,8 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		scopes = intersectScopes(scopes, typeFilters.IncludeScopes)
 	}
 
-	chunks, truncated, err := t.fetchAlwaysInjectChunks(
-		ctx, in.AgentID, in.ProjectID, orgID, scopes,
+	chunks, truncated, err := t.fetchInjectAudienceCandidates(
+		ctx, in.AgentID, t.resolveAgentType(ctx, in.AgentID), &lifecycleSlug, in.ProjectID, orgID, scopes,
 		typeFilters.IncludeChunkTypes,
 		typeFilters.ExcludeChunkTypes,
 		typeFilters.ExcludeQueryKeys,
@@ -327,7 +368,7 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 }
 
 // ResumeSession extends an existing active session's TTL and re-injects
-// always_inject chunks fresh. Use after a break or when resuming across
+// matching chunks fresh. Use after a break or when resuming across
 // tool calls. Extends TTL by the lifecycle's ttl_hours from now.
 func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessionInput) (*ResumeSessionResult, error) {
 	if in.SessionID == "" {
@@ -337,12 +378,14 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 	// Fetch session + lifecycle in one query.
 	var sess models.Session
 	var lcConfig []byte
+	var lcSlug *string
 	err := t.pool.QueryRow(ctx, `
 		SELECT s.id, s.agent_id, s.project_id, s.org_id, s.lifecycle_id,
 		       s.status, s.focus_task, s.chunks_written, s.chunks_read,
 		       s.consolidation_done, s.resume_count, s.expires_at,
 		       s.started_at, s.ended_at, s.created_at, s.updated_at,
-		       COALESCE(sl.config, '{"ttl_hours":8,"inject_scopes":["AGENT","PROJECT","ORG"]}'::jsonb) as lc_config
+		       COALESCE(sl.config, '{"ttl_hours":8,"inject_scopes":["AGENT","PROJECT","ORG"]}'::jsonb) as lc_config,
+		       sl.slug as lc_slug
 		FROM sessions s
 		LEFT JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
 		WHERE s.id = $1 AND s.org_id = $2
@@ -351,7 +394,7 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		&sess.Status, &sess.FocusTask, &sess.ChunksWritten, &sess.ChunksRead,
 		&sess.ConsolidationDone, &sess.ResumeCount, &sess.ExpiresAt,
 		&sess.StartedAt, &sess.EndedAt, &sess.CreatedAt, &sess.UpdatedAt,
-		&lcConfig,
+		&lcConfig, &lcSlug,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -392,8 +435,8 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		scopes = intersectScopes(scopes, typeFilters.IncludeScopes)
 	}
 
-	chunks, _, err := t.fetchAlwaysInjectChunks(
-		ctx, sess.AgentID, sess.ProjectID, orgID, scopes,
+	chunks, _, err := t.fetchInjectAudienceCandidates(
+		ctx, sess.AgentID, t.resolveAgentType(ctx, sess.AgentID), lcSlug, sess.ProjectID, orgID, scopes,
 		typeFilters.IncludeChunkTypes,
 		typeFilters.ExcludeChunkTypes,
 		typeFilters.ExcludeQueryKeys,

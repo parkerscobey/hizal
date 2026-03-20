@@ -74,7 +74,7 @@ func TestCreateAndListChunkTypes(t *testing.T) {
 				Name   string  `json:"name"`
 				Slug   string  `json:"slug"`
 				Scope  string  `json:"default_scope"`
-				Inject bool    `json:"default_always_inject"`
+				InjectAudience interface{} `json:"default_inject_audience"`
 				Consol string  `json:"consolidation_behavior"`
 			} `json:"chunk_types"`
 		}
@@ -94,7 +94,7 @@ func TestCreateAndListChunkTypes(t *testing.T) {
 	})
 
 	t.Run("CreateChunkType creates org-specific type", func(t *testing.T) {
-		body := `{"name": "Custom Chunk", "slug": "custom-chunk", "description": "A custom chunk type", "default_scope": "PROJECT", "default_always_inject": false, "consolidation_behavior": "SURFACE"}`
+		body := `{"name": "Custom Chunk", "slug": "custom-chunk", "description": "A custom chunk type", "default_scope": "PROJECT", "consolidation_behavior": "SURFACE"}`
 		req := httptest.NewRequest(http.MethodPost, "/v1/orgs/"+orgID+"/chunk-types", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		routeCtx := chi.NewRouteContext()

@@ -101,7 +101,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_identity",
-		Description: "Store an IDENTITY chunk scoped to an agent (always_inject=true). Use to define agent identity, personality, and core traits.",
+		Description: "Store an IDENTITY chunk scoped to an agent. Use to define agent identity, personality, and core traits.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -119,7 +119,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_memory",
-		Description: "Store a MEMORY chunk scoped to an agent (always_inject=false). Use for episodic context, conversation history, or task-specific memory.",
+		Description: "Store a MEMORY chunk scoped to an agent. Use for episodic context, conversation history, or task-specific memory.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -137,7 +137,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_knowledge",
-		Description: "Store a KNOWLEDGE chunk scoped to a project (always_inject=false). Use for project-specific facts, documentation, and reference material.",
+		Description: "Store a KNOWLEDGE chunk scoped to a project. Use for project-specific facts, documentation, and reference material.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -155,7 +155,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_convention",
-		Description: "Store a CONVENTION chunk scoped to a project (always_inject=true). Use for coding standards, patterns, and project conventions.",
+		Description: "Store a CONVENTION chunk scoped to a project. Use for coding standards, patterns, and project conventions.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -173,7 +173,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_org_knowledge",
-		Description: "Store a KNOWLEDGE chunk scoped to an org (always_inject=false). Use for organization-wide facts and documentation.",
+		Description: "Store a KNOWLEDGE chunk scoped to an org. Use for organization-wide facts and documentation.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -191,7 +191,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:         "store_principle",
-		Description:  "Store a PRINCIPLE chunk scoped to an org (always_inject=true). Requires promoted_by_user_id to enforce human promotion. Use for fundamental principles that agents must follow.",
+		Description:  "Store a PRINCIPLE chunk scoped to an org. Requires promoted_by_user_id to enforce human promotion. Use for fundamental principles that agents must follow.",
 		AllowedTypes: []string{"orchestrator", "admin"},
 		InputSchema: map[string]interface{}{
 			"type": "object",
@@ -211,23 +211,23 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "write_chunk",
-		Description: "Generic chunk writing tool. Looks up the type's scope and always_inject defaults from the chunk_types table, then applies any overrides. Use this for custom org chunk types. The six named tools (write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle) remain for the 12 global defaults — they're opinionated shortcuts that guarantee correct semantics.",
+		Description: "Generic chunk writing tool. Looks up the type's scope and inject_audience defaults from the chunk_types table, then applies any overrides. Use this for custom org chunk types. The six named tools (write_identity, write_memory, write_knowledge, write_convention, write_org_knowledge, store_principle) remain for the 12 global defaults — they're opinionated shortcuts that guarantee correct semantics.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"type":          map[string]interface{}{"type": "string", "description": "Chunk type slug (e.g. KNOWLEDGE, MEMORY, SPEC). Must be a valid type for the org."},
-				"query_key":     map[string]interface{}{"type": "string", "description": "Unique key for this context topic"},
-				"title":         map[string]interface{}{"type": "string", "description": "Short descriptive title"},
-				"content":       map[string]interface{}{"type": "string", "description": "Full context content"},
-				"project_id":    map[string]interface{}{"type": "string", "description": "Project UUID — required for PROJECT scope"},
-				"agent_id":      map[string]interface{}{"type": "string", "description": "Agent UUID — required for AGENT scope"},
-				"org_id":        map[string]interface{}{"type": "string", "description": "Org UUID — required for ORG scope"},
-				"always_inject": map[string]interface{}{"type": "boolean", "description": "Override default_always_inject from chunk_types table"},
-				"scope":         map[string]interface{}{"type": "string", "description": "Override default_scope from chunk_types table (PROJECT | AGENT | ORG)"},
-				"source_file":   map[string]interface{}{"type": "string", "description": "Source file path"},
-				"source_lines":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
-				"gotchas":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
-				"related":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
+				"type":            map[string]interface{}{"type": "string", "description": "Chunk type slug (e.g. KNOWLEDGE, MEMORY, SPEC). Must be a valid type for the org."},
+				"query_key":       map[string]interface{}{"type": "string", "description": "Unique key for this context topic"},
+				"title":           map[string]interface{}{"type": "string", "description": "Short descriptive title"},
+				"content":         map[string]interface{}{"type": "string", "description": "Full context content"},
+				"project_id":      map[string]interface{}{"type": "string", "description": "Project UUID — required for PROJECT scope"},
+				"agent_id":        map[string]interface{}{"type": "string", "description": "Agent UUID — required for AGENT scope"},
+				"org_id":          map[string]interface{}{"type": "string", "description": "Org UUID — required for ORG scope"},
+				"inject_audience": map[string]interface{}{"type": "string", "description": "Optional JSONB targeting spec. Rules are OR'd; conditions within a rule are AND'd. Example: {\"rules\":[{\"agent_types\":[\"dev\"]}]}. Omit to use chunk type default."},
+				"scope":           map[string]interface{}{"type": "string", "description": "Override default_scope from chunk_types table (PROJECT | AGENT | ORG)"},
+				"source_file":    map[string]interface{}{"type": "string", "description": "Source file path"},
+				"source_lines":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}, "description": "[start, end] line numbers"},
+				"gotchas":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of gotchas/warnings"},
+				"related":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Related query keys"},
 			},
 			"required": []string{"type", "query_key", "title", "content"},
 		},
@@ -244,7 +244,7 @@ var toolList = []toolSchema{
 				"agent_id":           map[string]interface{}{"type": "string", "description": "Filter to AGENT-scoped chunks for this agent UUID"},
 				"org_id":             map[string]interface{}{"type": "string", "description": "Filter to ORG-scoped chunks for this org UUID"},
 				"chunk_type":         map[string]interface{}{"type": "string", "description": "Filter by chunk_type: KNOWLEDGE | MEMORY | CONVENTION | IDENTITY | PRINCIPLE"},
-				"always_inject_only": map[string]interface{}{"type": "boolean", "description": "If true, return only always_inject=true chunks"},
+				"always_inject_only": map[string]interface{}{"type": "boolean", "description": "If true, return only chunks with inject_audience set (chunks targeted for ambient injection)"},
 				"limit":              map[string]interface{}{"type": "integer", "description": "Max results (default 10)"},
 				"query_key":          map[string]interface{}{"type": "string", "description": "Filter by exact query_key"},
 			},
@@ -343,7 +343,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "start_session",
-		Description: "Begin a new session for an agent. Returns the session ID and all always_inject chunks for the agent's context window. Fails if the agent already has an active session — use resume_session instead.",
+		Description: "Begin a new session for an agent. Returns the session ID and all inject_audience-matching chunks for the agent's context window. Fails if the agent already has an active session — use resume_session instead.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -364,7 +364,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "resume_session",
-		Description: "Extend an existing active session's TTL and re-inject always_inject chunks fresh. Use after a break or when resuming across tool calls.",
+		Description: "Extend an existing active session's TTL and re-inject matching chunks fresh. Use after a break or when resuming across tool calls.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
