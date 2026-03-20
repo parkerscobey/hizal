@@ -1628,6 +1628,13 @@ func TestRegisterFocusInput_Fields(t *testing.T) {
 	if in.Task != "Fix the login bug" {
 		t.Errorf("Task = %q, want 'Fix the login bug'", in.Task)
 	}
+	if in.Tags != nil {
+		t.Error("Tags should be nil by default")
+	}
+	in.Tags = []string{"migrations", "schema"}
+	if len(in.Tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(in.Tags))
+	}
 }
 
 func TestGetActiveSessionResult_Fields(t *testing.T) {
@@ -2034,5 +2041,21 @@ func TestEffectiveInjectAudience_RoundTrip(t *testing.T) {
 	got2 := effectiveInjectAudience(nil, defaultIA)
 	if !got2.Rules[0].All {
 		t.Error("default rule All should be true")
+	}
+}
+
+func TestAnyOverlap(t *testing.T) {
+	t.Parallel()
+	if !models.AnyOverlap([]string{"a", "b"}, []string{"b", "c"}) {
+		t.Error("expected overlap")
+	}
+	if models.AnyOverlap([]string{"a"}, []string{"b", "c"}) {
+		t.Error("expected no overlap")
+	}
+	if models.AnyOverlap(nil, []string{"a"}) {
+		t.Error("nil a should not overlap")
+	}
+	if models.AnyOverlap([]string{"a"}, nil) {
+		t.Error("nil b should not overlap")
 	}
 }

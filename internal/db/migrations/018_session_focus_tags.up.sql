@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS focus_tags TEXT[] NOT NULL DEFAULT '{}';

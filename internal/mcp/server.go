@@ -381,6 +381,11 @@ var toolList = []toolSchema{
 			"properties": map[string]interface{}{
 				"session_id": map[string]interface{}{"type": "string", "description": "UUID of the active session"},
 				"task":       map[string]interface{}{"type": "string", "description": "Description of the current task or goal"},
+				"tags": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Tags describing the current work (e.g. [\"migrations\", \"schema\"]). Chunks with matching focus_tags conditions will be injected automatically.",
+				},
 			},
 			"required": []string{"session_id", "task"},
 		},
