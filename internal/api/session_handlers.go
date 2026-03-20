@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/XferOps/winnow/internal/mcp"
@@ -25,6 +26,30 @@ func resolveOrgID(r *http.Request) string {
 		return claims.OrgID
 	}
 	return ""
+}
+
+// resolveOrgIDFromSession resolves the org_id for session-scoped endpoints.
+// API key path: reads from context (fast, no DB).
+// JWT user path: looks up the session's org_id from DB and verifies the user is a member.
+func (h *SessionHandlers) resolveOrgIDFromSession(r *http.Request, sessionID string) (string, error) {
+	if orgID := resolveOrgID(r); orgID != "" {
+		return orgID, nil
+	}
+	user, ok := JWTUserFrom(r.Context())
+	if !ok {
+		return "", fmt.Errorf("unauthenticated")
+	}
+	var orgID string
+	err := h.pool.QueryRow(r.Context(), `
+		SELECT s.org_id
+		FROM sessions s
+		JOIN org_memberships m ON m.org_id = s.org_id AND m.user_id = $2
+		WHERE s.id = $1
+	`, sessionID, user.ID).Scan(&orgID)
+	if err != nil {
+		return "", fmt.Errorf("session not found or access denied")
+	}
+	return orgID, nil
 }
 
 // POST /v1/sessions
@@ -64,9 +89,9 @@ func (h *SessionHandlers) StartSession(w http.ResponseWriter, r *http.Request) {
 // POST /v1/sessions/:id/resume
 func (h *SessionHandlers) ResumeSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	orgID := resolveOrgID(r)
-	if orgID == "" {
-		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "org context required")
+	orgID, err := h.resolveOrgIDFromSession(r, sessionID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
 		return
 	}
 	result, err := h.tools.ResumeSession(r.Context(), orgID, mcp.ResumeSessionInput{SessionID: sessionID})
@@ -88,9 +113,9 @@ func (h *SessionHandlers) RegisterFocus(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
 		return
 	}
-	orgID := resolveOrgID(r)
-	if orgID == "" {
-		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "org context required")
+	orgID, err := h.resolveOrgIDFromSession(r, sessionID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
 		return
 	}
 	result, err := h.tools.RegisterFocus(r.Context(), orgID, mcp.RegisterFocusInput{
@@ -107,9 +132,9 @@ func (h *SessionHandlers) RegisterFocus(w http.ResponseWriter, r *http.Request) 
 // POST /v1/sessions/:id/end
 func (h *SessionHandlers) EndSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	orgID := resolveOrgID(r)
-	if orgID == "" {
-		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "org context required")
+	orgID, err := h.resolveOrgIDFromSession(r, sessionID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
 		return
 	}
 	result, err := h.tools.EndSession(r.Context(), orgID, mcp.EndSessionInput{SessionID: sessionID})
@@ -224,7 +249,11 @@ func (h *SessionHandlers) GetSessionMemoryChunks(w http.ResponseWriter, r *http.
 // Returns chunks written during this session whose type has consolidation_behavior=SURFACE (for consolidation review).
 func (h *SessionHandlers) GetSessionConsolidationChunks(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	orgID := resolveOrgID(r)
+	orgID, err := h.resolveOrgIDFromSession(r, sessionID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
+		return
+	}
 
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT cc.id, cc.query_key, cc.title, cc.scope, cc.chunk_type, cc.always_inject, cc.created_at
@@ -276,7 +305,11 @@ func (h *SessionHandlers) GetSessionConsolidationChunks(w http.ResponseWriter, r
 // Processes KEEP/PROMOTE/DISCARD decisions for session MEMORY chunks.
 func (h *SessionHandlers) ConsolidateSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	orgID := resolveOrgID(r)
+	orgID, err := h.resolveOrgIDFromSession(r, sessionID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
+		return
+	}
 
 	var body struct {
 		Actions []struct {
@@ -293,7 +326,7 @@ func (h *SessionHandlers) ConsolidateSession(w http.ResponseWriter, r *http.Requ
 	// Verify session belongs to org
 	var agentID string
 	var projectID *string
-	err := h.pool.QueryRow(r.Context(), `
+	err = h.pool.QueryRow(r.Context(), `
 		SELECT agent_id, project_id FROM sessions WHERE id = $1 AND org_id = $2
 	`, sessionID, orgID).Scan(&agentID, &projectID)
 	if err != nil {
