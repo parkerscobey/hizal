@@ -585,28 +585,38 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 	}
 
 	var (
-		sessionID     string
-		lifecycleSlug string
-		focusTask     *string
-		expiresAt     string
-		chunksWritten int
-		resumeCount   int
-		injectSet     []string
+		sessionID      string
+		lifecycleSlug  string
+		focusTask      *string
+		expiresAt      string
+		chunksWritten  int
+		resumeCount    int
+		injectSetBytes []byte // inject_set is JSONB — scan to []byte then unmarshal
 	)
 
+	// LEFT JOIN so sessions with a NULL or deleted lifecycle_id still resolve.
 	err := t.pool.QueryRow(ctx, `
-		SELECT s.id, sl.slug, s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
+		SELECT s.id, COALESCE(sl.slug, 'default'), s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
 		FROM sessions s
-		JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
+		LEFT JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
 		WHERE s.agent_id = $1 AND s.status = 'active'
 		LIMIT 1
-	`, agentID).Scan(&sessionID, &lifecycleSlug, &focusTask, &expiresAt, &chunksWritten, &resumeCount, &injectSet)
+	`, agentID).Scan(&sessionID, &lifecycleSlug, &focusTask, &expiresAt, &chunksWritten, &resumeCount, &injectSetBytes)
 	if err != nil {
-		// No active session found.
-		return &GetActiveSessionResult{
-			Status:  "none",
-			Message: "no active session — call start_session to begin one",
-		}, nil
+		if err == pgx.ErrNoRows {
+			// Normal case: no active session exists.
+			return &GetActiveSessionResult{
+				Status:  "none",
+				Message: "no active session — call start_session to begin one",
+			}, nil
+		}
+		// Propagate unexpected errors rather than silently masking them as "none".
+		return nil, fmt.Errorf("GetActiveSession query: %w", err)
+	}
+
+	var injectSet []string
+	if len(injectSetBytes) > 0 {
+		_ = json.Unmarshal(injectSetBytes, &injectSet)
 	}
 
 	return &GetActiveSessionResult{
