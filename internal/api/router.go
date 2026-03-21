@@ -56,6 +56,17 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	agentTypeH := NewAgentTypeHandlers(pool)
 	chunkTypeH := NewChunkTypeHandlers(pool)
 	reviewH := NewReviewHandlers(pool)
+
+	pubH := NewPublicHandlers(pool, embed)
+
+	// ── Public routes (no auth required) ───────────────────────────────────
+	r.Group(func(r chi.Router) {
+		r.Use(RateLimit(30, 60))
+		r.Get("/api/v1/public/chunks/search", pubH.SearchPublicChunks)
+		r.Get("/api/v1/public/chunks", pubH.ListPublicChunks)
+		r.Get("/api/v1/public/chunks/{chunkID}", pubH.GetPublicChunk)
+	})
+
 	// Stripe webhook — no JWT auth, verified by Stripe-Signature header
 	r.Post("/v1/webhooks/stripe", billingH.HandleWebhook)
 
