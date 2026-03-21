@@ -103,11 +103,12 @@ func (h *SessionHandlers) ResumeSession(w http.ResponseWriter, r *http.Request) 
 }
 
 // POST /v1/sessions/:id/focus
-// Body: { task }
+// Body: { task, tags? }
 func (h *SessionHandlers) RegisterFocus(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	var body struct {
-		Task string `json:"task"`
+		Task string   `json:"task"`
+		Tags []string `json:"tags,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
@@ -121,6 +122,7 @@ func (h *SessionHandlers) RegisterFocus(w http.ResponseWriter, r *http.Request) 
 	result, err := h.tools.RegisterFocus(r.Context(), orgID, mcp.RegisterFocusInput{
 		SessionID: sessionID,
 		Task:      body.Task,
+		Tags:      body.Tags,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "FOCUS_FAILED", err.Error())
@@ -153,7 +155,7 @@ func (h *SessionHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 
 	query := `
 		SELECT s.id, s.agent_id, s.project_id, s.org_id, s.lifecycle_id,
-		       s.status, s.focus_task, s.chunks_written, s.chunks_read,
+		       s.status, s.focus_task, s.focus_tags, s.chunks_written, s.chunks_read,
 		       s.consolidation_done, s.resume_count, s.expires_at,
 		       s.started_at, s.ended_at, s.created_at, s.updated_at,
 		       a.name AS agent_name,
@@ -180,25 +182,26 @@ func (h *SessionHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type sessionRow struct {
-		ID                string  `json:"id"`
-		AgentID           string  `json:"agent_id"`
-		AgentName         *string `json:"agent_name,omitempty"`
-		ProjectID         *string `json:"project_id,omitempty"`
-		ProjectName       *string `json:"project_name,omitempty"`
-		OrgID             string  `json:"org_id"`
-		LifecycleID       *string `json:"lifecycle_id,omitempty"`
-		LifecycleSlug     *string `json:"lifecycle_slug,omitempty"`
-		Status            string  `json:"status"`
-		FocusTask         *string `json:"focus_task,omitempty"`
-		ChunksWritten     int     `json:"chunks_written"`
-		ChunksRead        int     `json:"chunks_read"`
-		ConsolidationDone bool    `json:"consolidation_done"`
-		ResumeCount       int     `json:"resume_count"`
-		ExpiresAt         string  `json:"expires_at"`
-		StartedAt         string  `json:"started_at"`
-		EndedAt           *string `json:"ended_at,omitempty"`
-		CreatedAt         string  `json:"created_at"`
-		UpdatedAt         string  `json:"updated_at"`
+		ID                string   `json:"id"`
+		AgentID           string   `json:"agent_id"`
+		AgentName         *string  `json:"agent_name,omitempty"`
+		ProjectID         *string  `json:"project_id,omitempty"`
+		ProjectName       *string  `json:"project_name,omitempty"`
+		OrgID             string   `json:"org_id"`
+		LifecycleID       *string  `json:"lifecycle_id,omitempty"`
+		LifecycleSlug     *string  `json:"lifecycle_slug,omitempty"`
+		Status            string   `json:"status"`
+		FocusTask         *string  `json:"focus_task,omitempty"`
+		FocusTags         []string `json:"focus_tags,omitempty"`
+		ChunksWritten     int      `json:"chunks_written"`
+		ChunksRead        int      `json:"chunks_read"`
+		ConsolidationDone bool     `json:"consolidation_done"`
+		ResumeCount       int      `json:"resume_count"`
+		ExpiresAt         string   `json:"expires_at"`
+		StartedAt         string   `json:"started_at"`
+		EndedAt           *string  `json:"ended_at,omitempty"`
+		CreatedAt         string   `json:"created_at"`
+		UpdatedAt         string   `json:"updated_at"`
 	}
 
 	sessions := []sessionRow{}
@@ -208,7 +211,7 @@ func (h *SessionHandlers) ListSessions(w http.ResponseWriter, r *http.Request) {
 		var endedAt interface{}
 		err := rows.Scan(
 			&s.ID, &s.AgentID, &s.ProjectID, &s.OrgID, &s.LifecycleID,
-			&s.Status, &s.FocusTask, &s.ChunksWritten, &s.ChunksRead,
+			&s.Status, &s.FocusTask, &s.FocusTags, &s.ChunksWritten, &s.ChunksRead,
 			&s.ConsolidationDone, &s.ResumeCount, &expiresAt,
 			&startedAt, &endedAt, &createdAt, &updatedAt,
 			&s.AgentName, &s.ProjectName, &s.LifecycleSlug,

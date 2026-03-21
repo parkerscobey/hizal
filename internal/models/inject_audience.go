@@ -47,16 +47,16 @@ func (r InjectAudienceRule) matches(agentID, agentType, lifecycleType, orgID str
 	if len(r.OrgIDs) > 0 && !slices.Contains(r.OrgIDs, orgID) {
 		return false
 	}
-	if len(r.AgentTags) > 0 && !anyOverlap(r.AgentTags, agentTags) {
+	if len(r.AgentTags) > 0 && !AnyOverlap(r.AgentTags, agentTags) {
 		return false
 	}
-	if len(r.FocusTags) > 0 && !anyOverlap(r.FocusTags, focusTags) {
+	if len(r.FocusTags) > 0 && !AnyOverlap(r.FocusTags, focusTags) {
 		return false
 	}
 	return true
 }
 
-func anyOverlap(a, b []string) bool {
+func AnyOverlap(a, b []string) bool {
 	for _, x := range a {
 		if slices.Contains(b, x) {
 			return true
@@ -149,9 +149,9 @@ func TestAnyOverlap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := anyOverlap(tt.a, tt.b)
+			got := AnyOverlap(tt.a, tt.b)
 			if got != tt.expected {
-				t.Errorf("anyOverlap(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.expected)
+				t.Errorf("AnyOverlap(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.expected)
 			}
 		})
 	}

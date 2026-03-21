@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/XferOps/winnow/internal/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/lib/pq"
 )
 
 // ---- Input/Output types ----
@@ -51,13 +53,15 @@ type ResumeSessionResult struct {
 }
 
 type RegisterFocusInput struct {
-	SessionID string `json:"session_id"`
-	Task      string `json:"task"`
+	SessionID string   `json:"session_id"`
+	Task      string   `json:"task"`
+	Tags      []string `json:"tags,omitempty"`
 }
 
 type RegisterFocusResult struct {
-	SessionID string `json:"session_id"`
-	FocusTask string `json:"focus_task"`
+	SessionID            string `json:"session_id"`
+	FocusTask            string `json:"focus_task"`
+	FocusInjectedChunks  int    `json:"focus_injected_chunks"`
 }
 
 type EndSessionInput struct {
@@ -191,6 +195,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 	excludeChunkTypes []string,
 	excludeQueryKeys []string,
 	maxInjectTokens int,
+	focusTags []string,
 ) ([]InjectedChunk, int, error) {
 	args := []any{agentID, orgID, scopes}
 	projectFilter := "AND (cc.scope != 'PROJECT')"
@@ -268,7 +273,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 		if lifecycleType != nil {
 			lifecycleStr = *lifecycleType
 		}
-		if ia.MatchesSession(agentID, agentType, lifecycleStr, orgID, agentTags, nil) {
+		if ia.MatchesSession(agentID, agentType, lifecycleStr, orgID, agentTags, focusTags) {
 			chunks = append(chunks, cand.InjectedChunk)
 		}
 	}
@@ -376,6 +381,7 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		typeFilters.ExcludeChunkTypes,
 		typeFilters.ExcludeQueryKeys,
 		typeFilters.MaxInjectTokens,
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -410,7 +416,7 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 	var lcSlug *string
 	err := t.pool.QueryRow(ctx, `
 		SELECT s.id, s.agent_id, s.project_id, s.org_id, s.lifecycle_id,
-		       s.status, s.focus_task, s.chunks_written, s.chunks_read,
+		       s.status, s.focus_task, s.focus_tags, s.chunks_written, s.chunks_read,
 		       s.consolidation_done, s.resume_count, s.expires_at,
 		       s.started_at, s.ended_at, s.created_at, s.updated_at,
 		       COALESCE(sl.config, '{"ttl_hours":8,"inject_scopes":["AGENT","PROJECT","ORG"]}'::jsonb) as lc_config,
@@ -420,7 +426,7 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		WHERE s.id = $1 AND s.org_id = $2
 	`, in.SessionID, orgID).Scan(
 		&sess.ID, &sess.AgentID, &sess.ProjectID, &sess.OrgID, &sess.LifecycleID,
-		&sess.Status, &sess.FocusTask, &sess.ChunksWritten, &sess.ChunksRead,
+		&sess.Status, &sess.FocusTask, &sess.FocusTags, &sess.ChunksWritten, &sess.ChunksRead,
 		&sess.ConsolidationDone, &sess.ResumeCount, &sess.ExpiresAt,
 		&sess.StartedAt, &sess.EndedAt, &sess.CreatedAt, &sess.UpdatedAt,
 		&lcConfig, &lcSlug,
@@ -471,6 +477,7 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		typeFilters.ExcludeChunkTypes,
 		typeFilters.ExcludeQueryKeys,
 		0,
+		sess.FocusTags,
 	)
 	if err != nil {
 		return nil, err
@@ -502,10 +509,10 @@ func (t *Tools) RegisterFocus(ctx context.Context, orgID string, in RegisterFocu
 	var sessionID string
 	err := t.pool.QueryRow(ctx, `
 		UPDATE sessions
-		SET focus_task = $1, updated_at = NOW()
+		SET focus_task = $1, focus_tags = $4, updated_at = NOW()
 		WHERE id = $2 AND org_id = $3 AND status = 'active'
 		RETURNING id
-	`, in.Task, in.SessionID, orgID).Scan(&sessionID)
+	`, in.Task, in.SessionID, orgID, in.Tags).Scan(&sessionID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("active session not found")
@@ -513,10 +520,97 @@ func (t *Tools) RegisterFocus(ctx context.Context, orgID string, in RegisterFocu
 		return nil, fmt.Errorf("RegisterFocus: %w", err)
 	}
 
+	focusInjectedCount := 0
+	count, err := t.updateFocusInjectSet(ctx, orgID, in.SessionID, in.Tags)
+	if err != nil {
+		log.Printf("focus inject set update failed: %v", err)
+	} else {
+		focusInjectedCount = count
+	}
+
 	return &RegisterFocusResult{
-		SessionID: sessionID,
-		FocusTask: in.Task,
+		SessionID:           sessionID,
+		FocusTask:           in.Task,
+		FocusInjectedChunks: focusInjectedCount,
 	}, nil
+}
+
+// updateFocusInjectSet finds chunks with focus_tags conditions that match
+// the new focus tags, and adds them to the session's inject_set.
+// Returns the count of newly-added chunks.
+func (t *Tools) updateFocusInjectSet(ctx context.Context, orgID, sessionID string, focusTags []string) (int, error) {
+	if len(focusTags) == 0 {
+		return 0, nil
+	}
+
+	var injectSetJSON []byte
+	err := t.pool.QueryRow(ctx,
+		`SELECT inject_set FROM sessions WHERE id = $1 AND org_id = $2`,
+		sessionID, orgID,
+	).Scan(&injectSetJSON)
+	if err != nil {
+		return 0, err
+	}
+
+	var currentIDs []string
+	if len(injectSetJSON) > 0 {
+		_ = json.Unmarshal(injectSetJSON, &currentIDs)
+	}
+
+	alreadyIn := make(map[string]bool)
+	for _, id := range currentIDs {
+		alreadyIn[id] = true
+	}
+
+	rows, err := t.pool.Query(ctx, `
+		SELECT id, inject_audience
+		FROM context_chunks
+		WHERE org_id = $1
+		  AND inject_audience IS NOT NULL
+		  AND id != ALL($2::uuid[])
+	`, orgID, pq.Array(currentIDs))
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var newIDs []string
+	for rows.Next() {
+		var id string
+		var iaJSON []byte
+		if err := rows.Scan(&id, &iaJSON); err != nil {
+			continue
+		}
+		var ia models.InjectAudience
+		if err := json.Unmarshal(iaJSON, &ia); err != nil {
+			continue
+		}
+		for _, rule := range ia.Rules {
+			if len(rule.FocusTags) > 0 && models.AnyOverlap(rule.FocusTags, focusTags) {
+				if !alreadyIn[id] {
+					newIDs = append(newIDs, id)
+					alreadyIn[id] = true
+				}
+				break
+			}
+		}
+	}
+
+	if len(newIDs) == 0 {
+		return 0, nil
+	}
+
+	allIDs := append(currentIDs, newIDs...)
+	allIDsJSON, _ := json.Marshal(allIDs)
+	_, err = t.pool.Exec(ctx,
+		`UPDATE sessions SET inject_set = $1 WHERE id = $2 AND org_id = $3`,
+		allIDsJSON, sessionID, orgID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(newIDs), nil
 }
 
 // EndSession closes the session and returns the chunks written during it
