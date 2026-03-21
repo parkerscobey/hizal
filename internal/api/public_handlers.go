@@ -87,7 +87,7 @@ func (h *PublicHandlers) ListPublicChunks(w http.ResponseWriter, r *http.Request
 			cc.content,
 			cc.chunk_type,
 			cc.query_key,
-			COALESCE(cc.tags, '{}') as tags,
+			COALESCE(to_jsonb(cc.tags), '[]'::jsonb) as tags,
 			o.name as org_name,
 			o.slug as org_slug,
 			cc.created_at,
@@ -154,7 +154,7 @@ func (h *PublicHandlers) GetPublicChunk(w http.ResponseWriter, r *http.Request) 
 	err := h.pool.QueryRow(ctx, `
 		SELECT
 			cc.id, cc.title, cc.content, cc.chunk_type, cc.query_key,
-			COALESCE(cc.tags, '{}') as tags,
+			COALESCE(to_jsonb(cc.tags), '[]'::jsonb) as tags,
 			o.name as org_name, o.slug as org_slug,
 			cc.created_at, cc.updated_at
 		FROM context_chunks cc
@@ -220,7 +220,7 @@ func (h *PublicHandlers) SearchPublicChunks(w http.ResponseWriter, r *http.Reque
 			rows, err := h.pool.Query(ctx, `
 				SELECT
 					cc.id, cc.title, cc.content, cc.chunk_type, cc.query_key,
-					COALESCE(cc.tags, '{}') as tags,
+					COALESCE(to_jsonb(cc.tags), '[]'::jsonb) as tags,
 					o.name as org_name, o.slug as org_slug,
 					cc.created_at, cc.updated_at
 				FROM context_chunks cc
@@ -254,7 +254,7 @@ func (h *PublicHandlers) SearchPublicChunks(w http.ResponseWriter, r *http.Reque
 		rows, err := h.pool.Query(ctx, `
 			SELECT
 				cc.id, cc.title, cc.content, cc.chunk_type, cc.query_key,
-				COALESCE(cc.tags, '{}') as tags,
+				COALESCE(to_jsonb(cc.tags), '[]'::jsonb) as tags,
 				o.name as org_name, o.slug as org_slug,
 				cc.created_at, cc.updated_at
 			FROM context_chunks cc
