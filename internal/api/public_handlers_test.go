@@ -83,15 +83,15 @@ func TestPublicChunks_ListOnlyReturnsPublic(t *testing.T) {
 	privateChunkID := uuid.NewString()
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, chunk_type, query_key, title, content, visibility)
-		VALUES ($1, $2, 'PROJECT', 'KNOWLEDGE', 'public-chunk', 'Public Chunk Title', '"public content"'::jsonb, 'public')
-	`, publicChunkID, projectID); err != nil {
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'public-chunk', 'Public Chunk Title', '"public content"'::jsonb, 'public')
+	`, publicChunkID, projectID, orgID); err != nil {
 		t.Fatalf("insert public chunk: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, chunk_type, query_key, title, content, visibility)
-		VALUES ($1, $2, 'PROJECT', 'KNOWLEDGE', 'private-chunk', 'Private Chunk Title', '"private content"'::jsonb, 'private')
-	`, privateChunkID, projectID); err != nil {
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'private-chunk', 'Private Chunk Title', '"private content"'::jsonb, 'private')
+	`, privateChunkID, projectID, orgID); err != nil {
 		t.Fatalf("insert private chunk: %v", err)
 	}
 
@@ -166,15 +166,15 @@ func TestPublicChunks_FilterByType(t *testing.T) {
 	conventionChunkID := uuid.NewString()
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, chunk_type, query_key, title, content, visibility)
-		VALUES ($1, $2, 'PROJECT', 'KNOWLEDGE', 'knowledge-chunk', 'Knowledge Chunk', '"knowledge content"'::jsonb, 'public')
-	`, knowledgeChunkID, projectID); err != nil {
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'knowledge-chunk', 'Knowledge Chunk', '"knowledge content"'::jsonb, 'public')
+	`, knowledgeChunkID, projectID, orgID); err != nil {
 		t.Fatalf("insert knowledge chunk: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, chunk_type, query_key, title, content, visibility)
-		VALUES ($1, $2, 'PROJECT', 'CONVENTION', 'convention-chunk', 'Convention Chunk', '"convention content"'::jsonb, 'public')
-	`, conventionChunkID, projectID); err != nil {
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'CONVENTION', 'convention-chunk', 'Convention Chunk', '"convention content"'::jsonb, 'public')
+	`, conventionChunkID, projectID, orgID); err != nil {
 		t.Fatalf("insert convention chunk: %v", err)
 	}
 
@@ -280,9 +280,9 @@ func TestGetPublicChunk_PrivateReturns404(t *testing.T) {
 	privateChunkID := uuid.NewString()
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, chunk_type, query_key, title, content, visibility)
-		VALUES ($1, $2, 'PROJECT', 'KNOWLEDGE', 'private-chunk', 'Private Chunk Title', '"private content"'::jsonb, 'private')
-	`, privateChunkID, projectID); err != nil {
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'private-chunk', 'Private Chunk Title', '"private content"'::jsonb, 'private')
+	`, privateChunkID, projectID, orgID); err != nil {
 		t.Fatalf("insert private chunk: %v", err)
 	}
 
@@ -340,9 +340,9 @@ func TestPublicChunks_SearchFallback(t *testing.T) {
 	searchableChunkID := uuid.NewString()
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO context_chunks (id, project_id, scope, chunk_type, query_key, title, content, visibility)
-		VALUES ($1, $2, 'PROJECT', 'KNOWLEDGE', 'search-chunk', 'Searchable Chunk', '"searchable content for testing"'::jsonb, 'public')
-	`, searchableChunkID, projectID); err != nil {
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'search-chunk', 'Searchable Chunk', '"searchable content for testing"'::jsonb, 'public')
+	`, searchableChunkID, projectID, orgID); err != nil {
 		t.Fatalf("insert searchable chunk: %v", err)
 	}
 
