@@ -59,7 +59,7 @@ func TestCanonicalDBModelsExist(t *testing.T) {
 			model: Agent{},
 			dbFields: []string{
 				"id", "org_id", "owner_id", "name", "slug", "type", "description", "status",
-				"platform", "instance_id", "ip_address", "last_active_at", "created_at", "updated_at",
+				"platform", "instance_id", "ip_address", "last_active_at", "created_at", "updated_at", "tags",
 			},
 			pointerFields: []string{"Description", "Platform", "InstanceID", "IPAddress", "LastActiveAt"},
 		},

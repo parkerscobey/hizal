@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_agents_tags;
+ALTER TABLE agents DROP COLUMN IF EXISTS tags;
