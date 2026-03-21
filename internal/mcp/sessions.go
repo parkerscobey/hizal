@@ -595,9 +595,9 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 	)
 
 	err := t.pool.QueryRow(ctx, `
-		SELECT s.id, sl.slug, s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
+		SELECT s.id, COALESCE(sl.slug, 'default'), s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
 		FROM sessions s
-		JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
+		LEFT JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
 		WHERE s.agent_id = $1 AND s.status = 'active'
 		LIMIT 1
 	`, agentID).Scan(&sessionID, &lifecycleSlug, &focusTask, &expiresAt, &chunksWritten, &resumeCount, &injectSet)
