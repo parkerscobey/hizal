@@ -8,6 +8,7 @@ import (
 
 	"github.com/XferOps/winnow/internal/embeddings"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 )
@@ -298,5 +299,171 @@ func (h *PublicHandlers) SearchPublicChunks(w http.ResponseWriter, r *http.Reque
 		Page:     page,
 		PageSize: pageSize,
 		HasMore:  hasMore,
+	})
+}
+
+type AddPublicChunkRequest struct {
+	Scope     string  `json:"scope"`
+	ProjectID *string `json:"project_id,omitempty"`
+	OrgID     *string `json:"org_id,omitempty"`
+	AgentID   *string `json:"agent_id,omitempty"`
+}
+
+func (h *PublicHandlers) AddPublicChunk(w http.ResponseWriter, r *http.Request) {
+	chunkID := chi.URLParam(r, "chunkID")
+	if chunkID == "" {
+		writeError(w, http.StatusBadRequest, "MISSING_ID", "chunk ID is required")
+		return
+	}
+
+	user, ok := JWTUserFrom(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "not authenticated")
+		return
+	}
+
+	var body AddPublicChunkRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+
+	if body.Scope == "" {
+		writeError(w, http.StatusBadRequest, "MISSING_SCOPE", "scope is required")
+		return
+	}
+
+	if body.Scope != "PROJECT" && body.Scope != "ORG" && body.Scope != "AGENT" {
+		writeError(w, http.StatusBadRequest, "INVALID_SCOPE", "scope must be PROJECT, ORG, or AGENT")
+		return
+	}
+
+	if body.Scope == "PROJECT" && (body.ProjectID == nil || *body.ProjectID == "") {
+		writeError(w, http.StatusBadRequest, "MISSING_PROJECT_ID", "project_id is required when scope is PROJECT")
+		return
+	}
+
+	if (body.Scope == "ORG" || body.Scope == "AGENT") && (body.OrgID == nil || *body.OrgID == "") {
+		writeError(w, http.StatusBadRequest, "MISSING_ORG_ID", "org_id is required when scope is ORG or AGENT")
+		return
+	}
+
+	if body.Scope == "AGENT" && (body.AgentID == nil || *body.AgentID == "") {
+		writeError(w, http.StatusBadRequest, "MISSING_AGENT_ID", "agent_id is required when scope is AGENT")
+		return
+	}
+
+	ctx := r.Context()
+
+	var sourceTitle, sourceContent, sourceChunkType, sourceQueryKey string
+	var sourceTags []string
+	var sourceSourceLines, sourceGotchas, sourceRelated []byte
+	var sourceProjectID, sourceAgentID, sourceCreatedByAgent *string
+	var sourceInjectAudience []byte
+	var sourceScope, sourceVisibility, sourceOrgName string
+
+	err := h.pool.QueryRow(ctx, `
+		SELECT cc.project_id, cc.scope, cc.agent_id, cc.inject_audience,
+		       cc.visibility, cc.chunk_type, cc.query_key, cc.title, cc.content,
+		       cc.tags, cc.source_lines, cc.gotchas, cc.related, cc.created_by_agent,
+		       o.name as source_org_name
+		FROM context_chunks cc
+		JOIN orgs o ON o.id = cc.org_id
+		WHERE cc.id = $1 AND cc.visibility = 'public'
+	`, chunkID).Scan(
+		&sourceProjectID, &sourceScope, &sourceAgentID,
+		&sourceInjectAudience, &sourceVisibility, &sourceChunkType, &sourceQueryKey,
+		&sourceTitle, &sourceContent, &sourceTags, &sourceSourceLines,
+		&sourceGotchas, &sourceRelated, &sourceCreatedByAgent,
+		&sourceOrgName,
+	)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "chunk not found or not public")
+		return
+	}
+
+	var destOrgID string
+	switch body.Scope {
+	case "PROJECT":
+		err := h.pool.QueryRow(ctx, `
+			SELECT p.org_id FROM projects p
+			LEFT JOIN project_memberships pm ON pm.project_id = p.id AND pm.user_id = $2
+			LEFT JOIN org_memberships om ON om.org_id = p.org_id AND om.user_id = $2
+			WHERE p.id = $1 AND (pm.user_id IS NOT NULL OR om.user_id IS NOT NULL)
+		`, *body.ProjectID, user.ID).Scan(&destOrgID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "not authorized to add to this project")
+			return
+		}
+
+	case "ORG":
+		_, err := requireOrgRole(r, h.pool, *body.OrgID, "owner", "admin")
+		if err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "must be org owner or admin to add chunks at org scope")
+			return
+		}
+		destOrgID = *body.OrgID
+
+	case "AGENT":
+		err := h.pool.QueryRow(ctx, `
+			SELECT a.org_id FROM agents a
+			LEFT JOIN org_memberships om ON om.org_id = a.org_id AND om.user_id = $2
+			WHERE a.id = $1 AND (a.owner_id = $2 OR om.role IN ('owner', 'admin'))
+		`, *body.AgentID, user.ID).Scan(&destOrgID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "not authorized to add chunks to this agent")
+			return
+		}
+	}
+
+	if body.Scope == "PROJECT" && body.OrgID != nil {
+		destOrgID = *body.OrgID
+	}
+
+	newID := uuid.New().String()
+	now := time.Now()
+
+	var projectID, agentID, orgID *string
+	switch body.Scope {
+	case "PROJECT":
+		projectID = body.ProjectID
+		orgID = &destOrgID
+	case "ORG":
+		orgID = &destOrgID
+	case "AGENT":
+		agentID = body.AgentID
+		orgID = &destOrgID
+	}
+
+	sourceChunkID := chunkID
+	sourceOrg := sourceOrgName
+
+	_, err = h.pool.Exec(ctx, `
+		INSERT INTO context_chunks (
+			id, project_id, scope, agent_id, org_id, inject_audience,
+			visibility, chunk_type, query_key, title, content,
+			tags, source_lines, gotchas, related, created_by_agent,
+			source_chunk_id, source_org_name,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			'private', $7, $8, $9, $10,
+			$11, $12, $13, $14, $15,
+			$16, $17,
+			$18, $18
+		)
+	`, newID, projectID, body.Scope, agentID, orgID, nil,
+		sourceChunkType, sourceQueryKey, sourceTitle, sourceContent,
+		sourceTags, sourceSourceLines, sourceGotchas, sourceRelated, sourceCreatedByAgent,
+		&sourceChunkID, &sourceOrg,
+		now,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"id": newID,
 	})
 }

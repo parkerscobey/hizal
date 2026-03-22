@@ -141,6 +141,8 @@ type ContextChunk struct {
 	Content        []byte          `json:"content" db:"content"` // JSONB
 	Embedding      pgvector.Vector `json:"embedding,omitempty" db:"embedding"`
 	SourceFile     *string         `json:"source_file,omitempty" db:"source_file"`
+	SourceChunkID  *string         `json:"source_chunk_id,omitempty" db:"source_chunk_id"`
+	SourceOrgName  *string         `json:"source_org_name,omitempty" db:"source_org_name"`
 	SourceLines    []byte          `json:"source_lines" db:"source_lines"` // JSONB
 	Gotchas        []byte          `json:"gotchas" db:"gotchas"`           // JSONB
 	Related        []byte          `json:"related" db:"related"`           // JSONB

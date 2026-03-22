@@ -377,3 +377,385 @@ func TestPublicChunks_SearchFallback(t *testing.T) {
 		t.Error("searchable chunk should appear in search results")
 	}
 }
+
+func TestAddPublicChunk_ToProject(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New() error = %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	sourceOrgID := uuid.NewString()
+	sourceProjectID := uuid.NewString()
+	userID := uuid.NewString()
+	destOrgID := uuid.NewString()
+	destProjectID := uuid.NewString()
+	userEmail := "add-chunk-test-" + strings.ToLower(uuid.NewString()) + "@example.com"
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM context_chunks WHERE org_id = $1 OR org_id = $2`, sourceOrgID, destOrgID)
+		_, _ = pool.Exec(ctx, `DELETE FROM projects WHERE id = $1 OR id = $2`, sourceProjectID, destProjectID)
+		_, _ = pool.Exec(ctx, `DELETE FROM orgs WHERE id = $1 OR id = $2`, sourceOrgID, destOrgID)
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	})
+
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug, tier) VALUES ($1, $2, $3, 'pro')`, sourceOrgID, "Source Org", "source-org-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert source org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug, tier) VALUES ($1, $2, $3, 'pro')`, destOrgID, "Dest Org", "dest-org-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert dest org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, userEmail, "Add Chunk Test User"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO org_memberships (user_id, org_id, role) VALUES ($1, $2, 'member')`, userID, destOrgID); err != nil {
+		t.Fatalf("insert org membership: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO projects (id, org_id, name, slug) VALUES ($1, $2, $3, $4)`, sourceProjectID, sourceOrgID, "Source Project", "source-proj-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert source project: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO projects (id, org_id, name, slug) VALUES ($1, $2, $3, $4)`, destProjectID, destOrgID, "Dest Project", "dest-proj-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert dest project: %v", err)
+	}
+
+	publicChunkID := uuid.NewString()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'add-chunk-test', 'Public Chunk', '"public content"'::jsonb, 'public')
+	`, publicChunkID, sourceProjectID, sourceOrgID); err != nil {
+		t.Fatalf("insert public chunk: %v", err)
+	}
+
+	token, err := SignJWT(userID, userEmail)
+	if err != nil {
+		t.Fatalf("SignJWT() error = %v", err)
+	}
+
+	router := NewRouter(pool, nil)
+
+	t.Run("add to project", func(t *testing.T) {
+		body := map[string]interface{}{
+			"scope":      "PROJECT",
+			"project_id": destProjectID,
+		}
+		bodyBytes, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/chunks/"+publicChunkID+"/add", strings.NewReader(string(bodyBytes)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d, body = %s", rr.Code, http.StatusCreated, rr.Body.String())
+		}
+
+		var response map[string]string
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+
+		newChunkID := response["id"]
+		if newChunkID == "" {
+			t.Fatal("response should contain new chunk ID")
+		}
+
+		var sourceChunkID, visibility, sourceOrgName string
+		err := pool.QueryRow(ctx, `
+			SELECT source_chunk_id, visibility, COALESCE(source_org_name, '')
+			FROM context_chunks WHERE id = $1
+		`, newChunkID).Scan(&sourceChunkID, &visibility, &sourceOrgName)
+		if err != nil {
+			t.Fatalf("query new chunk: %v", err)
+		}
+
+		if sourceChunkID != publicChunkID {
+			t.Errorf("source_chunk_id = %s, want %s", sourceChunkID, publicChunkID)
+		}
+		if visibility != "private" {
+			t.Errorf("visibility = %s, want private", visibility)
+		}
+		if sourceOrgName == "" {
+			t.Error("source_org_name should be set")
+		}
+	})
+
+	t.Run("not found for non-public chunk", func(t *testing.T) {
+		privateChunkID := uuid.NewString()
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+			VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'private-chunk', 'Private Chunk', '"private content"'::jsonb, 'private')
+		`, privateChunkID, sourceProjectID, sourceOrgID); err != nil {
+			t.Fatalf("insert private chunk: %v", err)
+		}
+
+		body := map[string]interface{}{
+			"scope":      "PROJECT",
+			"project_id": destProjectID,
+		}
+		bodyBytes, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/chunks/"+privateChunkID+"/add", strings.NewReader(string(bodyBytes)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d, body = %s", rr.Code, http.StatusNotFound, rr.Body.String())
+		}
+	})
+
+	t.Run("missing scope", func(t *testing.T) {
+		body := map[string]interface{}{
+			"project_id": destProjectID,
+		}
+		bodyBytes, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/chunks/"+publicChunkID+"/add", strings.NewReader(string(bodyBytes)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d, body = %s", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+	})
+
+	t.Run("missing project_id for PROJECT scope", func(t *testing.T) {
+		body := map[string]interface{}{
+			"scope": "PROJECT",
+		}
+		bodyBytes, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/chunks/"+publicChunkID+"/add", strings.NewReader(string(bodyBytes)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d, body = %s", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+	})
+}
+
+func TestAddPublicChunk_ToOrg(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New() error = %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	sourceOrgID := uuid.NewString()
+	sourceProjectID := uuid.NewString()
+	userID := uuid.NewString()
+	destOrgID := uuid.NewString()
+	userEmail := "add-chunk-org-test-" + strings.ToLower(uuid.NewString()) + "@example.com"
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM context_chunks WHERE org_id = $1 OR org_id = $2`, sourceOrgID, destOrgID)
+		_, _ = pool.Exec(ctx, `DELETE FROM projects WHERE id = $1`, sourceProjectID)
+		_, _ = pool.Exec(ctx, `DELETE FROM orgs WHERE id = $1 OR id = $2`, sourceOrgID, destOrgID)
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	})
+
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug, tier) VALUES ($1, $2, $3, 'pro')`, sourceOrgID, "Source Org", "source-org-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert source org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug, tier) VALUES ($1, $2, $3, 'pro')`, destOrgID, "Dest Org", "dest-org-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert dest org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, userEmail, "Add Chunk Org Test User"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO org_memberships (user_id, org_id, role) VALUES ($1, $2, 'admin')`, userID, destOrgID); err != nil {
+		t.Fatalf("insert org admin membership: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO projects (id, org_id, name, slug) VALUES ($1, $2, $3, $4)`, sourceProjectID, sourceOrgID, "Source Project", "source-proj-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert source project: %v", err)
+	}
+
+	publicChunkID := uuid.NewString()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'add-chunk-org-test', 'Public Chunk', '"public content"'::jsonb, 'public')
+	`, publicChunkID, sourceProjectID, sourceOrgID); err != nil {
+		t.Fatalf("insert public chunk: %v", err)
+	}
+
+	token, err := SignJWT(userID, userEmail)
+	if err != nil {
+		t.Fatalf("SignJWT() error = %v", err)
+	}
+
+	router := NewRouter(pool, nil)
+
+	body := map[string]interface{}{
+		"scope":  "ORG",
+		"org_id": destOrgID,
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/public/chunks/"+publicChunkID+"/add", strings.NewReader(string(bodyBytes)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body = %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	var response map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	newChunkID := response["id"]
+	if newChunkID == "" {
+		t.Fatal("response should contain new chunk ID")
+	}
+
+	var scope, visibility string
+	err = pool.QueryRow(ctx, `
+		SELECT scope, visibility FROM context_chunks WHERE id = $1
+	`, newChunkID).Scan(&scope, &visibility)
+	if err != nil {
+		t.Fatalf("query new chunk: %v", err)
+	}
+
+	if scope != "ORG" {
+		t.Errorf("scope = %s, want ORG", scope)
+	}
+	if visibility != "private" {
+		t.Errorf("visibility = %s, want private", visibility)
+	}
+}
+
+func TestAddPublicChunk_ToAgent(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New() error = %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	sourceOrgID := uuid.NewString()
+	sourceProjectID := uuid.NewString()
+	userID := uuid.NewString()
+	destOrgID := uuid.NewString()
+	agentID := uuid.NewString()
+	userEmail := "add-chunk-agent-test-" + strings.ToLower(uuid.NewString()) + "@example.com"
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM context_chunks WHERE org_id = $1 OR org_id = $2`, sourceOrgID, destOrgID)
+		_, _ = pool.Exec(ctx, `DELETE FROM agents WHERE id = $1`, agentID)
+		_, _ = pool.Exec(ctx, `DELETE FROM projects WHERE id = $1`, sourceProjectID)
+		_, _ = pool.Exec(ctx, `DELETE FROM orgs WHERE id = $1 OR id = $2`, sourceOrgID, destOrgID)
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	})
+
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug, tier) VALUES ($1, $2, $3, 'pro')`, sourceOrgID, "Source Org", "source-org-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert source org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug, tier) VALUES ($1, $2, $3, 'pro')`, destOrgID, "Dest Org", "dest-org-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert dest org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, userEmail, "Add Chunk Agent Test User"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO agents (id, org_id, owner_id, name, slug, status) VALUES ($1, $2, $3, $4, $5, 'active')`, agentID, destOrgID, userID, "Test Agent", "test-agent-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert agent: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO projects (id, org_id, name, slug) VALUES ($1, $2, $3, $4)`, sourceProjectID, sourceOrgID, "Source Project", "source-proj-"+uuid.NewString()[:8]); err != nil {
+		t.Fatalf("insert source project: %v", err)
+	}
+
+	publicChunkID := uuid.NewString()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO context_chunks (id, project_id, org_id, scope, chunk_type, query_key, title, content, visibility)
+		VALUES ($1, $2, $3, 'PROJECT', 'KNOWLEDGE', 'add-chunk-agent-test', 'Public Chunk', '"public content"'::jsonb, 'public')
+	`, publicChunkID, sourceProjectID, sourceOrgID); err != nil {
+		t.Fatalf("insert public chunk: %v", err)
+	}
+
+	token, err := SignJWT(userID, userEmail)
+	if err != nil {
+		t.Fatalf("SignJWT() error = %v", err)
+	}
+
+	router := NewRouter(pool, nil)
+
+	body := map[string]interface{}{
+		"scope":   "AGENT",
+		"org_id":  destOrgID,
+		"agent_id": agentID,
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/public/chunks/"+publicChunkID+"/add", strings.NewReader(string(bodyBytes)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body = %s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	var response map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	newChunkID := response["id"]
+	if newChunkID == "" {
+		t.Fatal("response should contain new chunk ID")
+	}
+
+	var scope, visibility string
+	err = pool.QueryRow(ctx, `
+		SELECT scope, visibility FROM context_chunks WHERE id = $1
+	`, newChunkID).Scan(&scope, &visibility)
+	if err != nil {
+		t.Fatalf("query new chunk: %v", err)
+	}
+
+	if scope != "AGENT" {
+		t.Errorf("scope = %s, want AGENT", scope)
+	}
+	if visibility != "private" {
+		t.Errorf("visibility = %s, want private", visibility)
+	}
+}
