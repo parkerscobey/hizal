@@ -29,6 +29,13 @@ hizal__register_focus(
 - Mid-session, if the task changes significantly
 - After a context reset, to re-establish focus
 
+## Response
+
+Returns `focus_chunks` — every focus-tag-matched chunk (newly added first) with
+`id, query_key, title, scope, chunk_type`. Pull full content via `read_context`.
+`focus_injected_chunks` is the total matched; `0` truly means nothing matched
+(already-injected matches count). `focus_new_chunks` counts newly added ones.
+
 ## Tips
 
 - Keep tags specific and domain-relevant. Good: `["webhooks", "signing", "nuvei"]`. Bad: `["code", "work"]`.

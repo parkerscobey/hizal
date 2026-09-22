@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
@@ -344,5 +345,89 @@ func TestLatestFiltering_NoLimit(t *testing.T) {
 
 	if len(allMatched) != 2 {
 		t.Errorf("got %d chunks, want 2", len(allMatched))
+	}
+}
+
+func TestMatchFocusTags(t *testing.T) {
+	t.Parallel()
+
+	match := []byte(`{"rules":[{"focus_tags":["checkout-v2","billing"]}]}`)
+	if !matchFocusTags(match, []string{"billing"}) {
+		t.Error("expected overlap match")
+	}
+	if matchFocusTags(match, []string{"unrelated"}) {
+		t.Error("expected no match for unrelated tags")
+	}
+	if matchFocusTags(match, nil) {
+		t.Error("empty focus tags should never match")
+	}
+	noFocusRule := []byte(`{"rules":[{"all":true}]}`)
+	if matchFocusTags(noFocusRule, []string{"billing"}) {
+		t.Error("rule without focus_tags should not match")
+	}
+	if matchFocusTags([]byte(`not json`), []string{"billing"}) {
+		t.Error("malformed payload should not match")
+	}
+	if matchFocusTags(nil, []string{"billing"}) {
+		t.Error("empty payload should not match")
+	}
+}
+
+func TestPartitionFocusMatches(t *testing.T) {
+	t.Parallel()
+
+	candidates := []focusCandidate{
+		{ID: "new-1", QueryKey: "k1", Title: "T1", Scope: "PROJECT", ChunkType: "KNOWLEDGE", IARaw: []byte(`{"rules":[{"focus_tags":["a"]}]}`)},
+		{ID: "old-1", QueryKey: "k2", Title: "T2", Scope: "AGENT", ChunkType: "MEMORY", IARaw: []byte(`{"rules":[{"focus_tags":["a"]}]}`)},
+		{ID: "miss-1", QueryKey: "k3", Title: "T3", Scope: "ORG", ChunkType: "PRINCIPLE", IARaw: []byte(`{"rules":[{"focus_tags":["zzz"]}]}`)},
+		{ID: "bad-1", QueryKey: "k4", Title: "T4", Scope: "ORG", ChunkType: "KNOWLEDGE", IARaw: []byte(`broken`)},
+	}
+	upd := partitionFocusMatches([]string{"old-1"}, candidates, []string{"a"})
+
+	if len(upd.NewIDs) != 1 || upd.NewIDs[0] != "new-1" {
+		t.Errorf("NewIDs = %v, want [new-1]", upd.NewIDs)
+	}
+	if len(upd.Matched) != 2 {
+		t.Fatalf("Matched len = %d, want 2 (new + already-present, miss + malformed excluded)", len(upd.Matched))
+	}
+	// Newly added first.
+	if upd.Matched[0].ID != "new-1" || upd.Matched[1].ID != "old-1" {
+		t.Errorf("Matched order = [%s %s], want [new-1 old-1]", upd.Matched[0].ID, upd.Matched[1].ID)
+	}
+	if upd.Matched[0].QueryKey != "k1" || upd.Matched[0].Scope != "PROJECT" || upd.Matched[0].ChunkType != "KNOWLEDGE" {
+		t.Errorf("Matched[0] descriptors = %+v, want k1/PROJECT/KNOWLEDGE", upd.Matched[0])
+	}
+
+	// Empty tags match nothing.
+	empty := partitionFocusMatches(nil, candidates, nil)
+	if len(empty.Matched) != 0 || len(empty.NewIDs) != 0 {
+		t.Errorf("empty tags should match nothing, got %+v", empty)
+	}
+}
+
+func TestRegisterFocusResultJSON(t *testing.T) {
+	t.Parallel()
+
+	r := RegisterFocusResult{
+		SessionID:           "sess-1",
+		FocusTask:           "task",
+		FocusInjectedChunks: 2,
+		FocusNewChunks:      1,
+		FocusChunks: []FocusMatchedChunk{
+			{ID: "c1", QueryKey: "k", Title: "T", Scope: "PROJECT", ChunkType: "KNOWLEDGE"},
+		},
+	}
+	var decoded map[string]interface{}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"session_id", "focus_task", "focus_injected_chunks", "focus_new_chunks", "focus_chunks"} {
+		if _, ok := decoded[key]; !ok {
+			t.Errorf("result JSON missing key %q: %s", key, raw)
+		}
 	}
 }

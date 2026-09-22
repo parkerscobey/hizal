@@ -437,7 +437,7 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "register_focus",
-		Description: "Record what task the agent is currently working on within a session. Required if the lifecycle config has 'register_focus' in required_steps.",
+		Description: "Record what task the agent is currently working on within a session. Required if the lifecycle config has 'register_focus' in required_steps. Returns focus_chunks (every focus-tag-matched chunk, newly added first) — focus_injected_chunks is the total matched, 0 truly means nothing matched.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
