@@ -305,7 +305,7 @@ Fetch chunks matching a query for agent-side compaction. **The server does NOT s
 
 ### update_context
 
-Versioned update to an existing chunk. Creates a new version while preserving history.
+Versioned update to an existing chunk. Creates a new version while preserving history. Chunk ID is stable — use this to retarget injection instead of delete + recreate.
 
 **Input:**
 ```json
@@ -317,9 +317,16 @@ Versioned update to an existing chunk. Creates a new version while preserving hi
   "source_lines": "[int, int]?",
   "gotchas": ["string"]?,
   "related": ["string"]?,
+  "inject_audience": {"rules": [{"focus_tags": ["checkout-v2"]}]},
+  "clear_inject_audience": false,
   "change_note": "Added password reset info"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `inject_audience` | object | DNF targeting spec (`{"rules":[...]}`). `{"rules":[]}` never auto-injects. Mutually exclusive with `clear_inject_audience`. |
+| `clear_inject_audience` | boolean | `true` clears auto-injection — chunk stays searchable, never auto-injected. Mutually exclusive with `inject_audience`. |
 
 ### delete_context
 

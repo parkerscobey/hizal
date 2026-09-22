@@ -305,7 +305,13 @@ type UpdateContextInput struct {
 	CustomFields   map[string]any   `json:"custom_fields,omitempty"`
 	ChangeNote     string           `json:"change_note"`
 	InjectAudience *json.RawMessage `json:"inject_audience,omitempty"`
-	Visibility     *string          `json:"visibility,omitempty"`
+	// ClearInjectAudience explicitly clears auto-injection (SET NULL) so the
+	// chunk stays searchable but is never auto-injected. Mutually exclusive
+	// with InjectAudience. Needed because JSON null unmarshals to a nil
+	// *json.RawMessage, making explicit null indistinguishable from omitted.
+	// As an alternative, {"rules":[]} also never matches (see MatchesSession).
+	ClearInjectAudience *bool   `json:"clear_inject_audience,omitempty"`
+	Visibility          *string `json:"visibility,omitempty"`
 }
 
 type UpdateContextResult struct {
@@ -1015,6 +1021,14 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 	if in.ChangeNote == "" {
 		return nil, fmt.Errorf("change_note is required")
 	}
+	if in.ClearInjectAudience != nil && *in.ClearInjectAudience && in.InjectAudience != nil {
+		return nil, fmt.Errorf("clear_inject_audience and inject_audience are mutually exclusive — pass one or the other")
+	}
+	if in.InjectAudience != nil {
+		if err := validateInjectAudienceRaw(*in.InjectAudience); err != nil {
+			return nil, err
+		}
+	}
 
 	// Fetch current chunk — scope-aware: look up by ID only (chunk IDs are globally unique).
 	row := pool(t).QueryRow(ctx, `
@@ -1097,6 +1111,9 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 		args = append(args, *in.InjectAudience)
 		argIdx++
 	}
+	if in.ClearInjectAudience != nil && *in.ClearInjectAudience {
+		setClauses = append(setClauses, "inject_audience = NULL")
+	}
 	if in.Visibility != nil {
 		setClauses = append(setClauses, fmt.Sprintf("visibility = $%d", argIdx))
 		args = append(args, normalizeVisibility(*in.Visibility))
@@ -1124,7 +1141,7 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 		return nil, fmt.Errorf("update chunk: %w", err)
 	}
 
-	if in.InjectAudience != nil {
+	if in.InjectAudience != nil || (in.ClearInjectAudience != nil && *in.ClearInjectAudience) {
 		_, _ = pool(t).Exec(ctx, `
 			UPDATE sessions
 			SET inject_set = NULL, updated_at = NOW()
@@ -2033,6 +2050,36 @@ func resolveInjectAudience(raw *json.RawMessage) *models.InjectAudience {
 		return nil
 	}
 	return &ia
+}
+
+// validateInjectAudienceRaw rejects malformed inject_audience payloads on
+// update before they reach the DB. It accepts the same shapes as writes
+// (object or double-encoded string) plus {"rules":[]} as an explicit
+// never-inject tombstone. A missing "rules" key or non-array rules is an
+// error — use clear_inject_audience:true to clear instead.
+func validateInjectAudienceRaw(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return fmt.Errorf("inject_audience must be an object like {\"rules\":[...]} — use clear_inject_audience:true to clear injection")
+	}
+	unwrapped := raw
+	// Unwrap double-encoded string input from MCP clients.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		unwrapped = json.RawMessage(s)
+	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(unwrapped, &shape); err != nil {
+		return fmt.Errorf("inject_audience must be an object like {\"rules\":[...]}: %w", err)
+	}
+	rulesRaw, ok := shape["rules"]
+	if !ok {
+		return fmt.Errorf("inject_audience must contain a \"rules\" array — use clear_inject_audience:true to clear injection")
+	}
+	var rules []models.InjectAudienceRule
+	if err := json.Unmarshal(rulesRaw, &rules); err != nil {
+		return fmt.Errorf("inject_audience.rules must be an array: %w", err)
+	}
+	return nil
 }
 
 func nullInjectAudience(ia *models.InjectAudience) interface{} {
