@@ -23,6 +23,10 @@ type StartSessionInput struct {
 	AgentID       string  `json:"-"`
 	ProjectID     *string `json:"project_id,omitempty"`
 	LifecycleSlug *string `json:"lifecycle_slug,omitempty"` // defaults to "default"
+	// ChunkDetail controls injected chunk payload: "full" (default, back-compat)
+	// returns complete content; "summary" returns id/query_key/title/scope/type/size
+	// only — pull full content for relevant chunks via read_context.
+	ChunkDetail *string `json:"chunk_detail,omitempty"`
 }
 
 type StartSessionResult struct {
@@ -30,8 +34,24 @@ type StartSessionResult struct {
 	ExpiresAt      time.Time       `json:"expires_at"`
 	Lifecycle      string          `json:"lifecycle"`
 	RequiredSteps  []string        `json:"required_steps"`
-	InjectedChunks []InjectedChunk `json:"injected_chunks"`
-	TruncatedCount int             `json:"truncated_count,omitempty"`
+	InjectedChunks []InjectedChunk `json:"injected_chunks,omitempty"`
+	// ChunkSummaries carries summaries for chunks withheld from InjectedChunks:
+	// every chunk in "summary" mode, or the over-budget dropped set in "full" mode.
+	ChunkSummaries []InjectedChunkSummary `json:"chunk_summaries,omitempty"`
+	// TotalContentSize is the summed len(content) chars of the full inject set.
+	TotalContentSize int `json:"total_content_size,omitempty"`
+	TruncatedCount   int `json:"truncated_count,omitempty"`
+}
+
+// InjectedChunkSummary is a content-free descriptor of an injectable chunk.
+// Use read_context with the ID to pull full content.
+type InjectedChunkSummary struct {
+	ID        string `json:"id"`
+	QueryKey  string `json:"query_key"`
+	Title     string `json:"title"`
+	Scope     string `json:"scope"`
+	ChunkType string `json:"chunk_type"`
+	Size      int    `json:"size"` // len(content) in chars
 }
 
 type InjectedChunk struct {
@@ -46,6 +66,8 @@ type InjectedChunk struct {
 
 type ResumeSessionInput struct {
 	SessionID string `json:"session_id"`
+	// ChunkDetail mirrors StartSessionInput: "full" (default) or "summary".
+	ChunkDetail *string `json:"chunk_detail,omitempty"`
 }
 
 type ResumeSessionResult struct {
@@ -54,7 +76,13 @@ type ResumeSessionResult struct {
 	FocusTask      *string         `json:"focus_task,omitempty"`
 	ChunksWritten  int             `json:"chunks_written"`
 	ResumeCount    int             `json:"resume_count"`
-	InjectedChunks []InjectedChunk `json:"injected_chunks"`
+	InjectedChunks []InjectedChunk `json:"injected_chunks,omitempty"`
+	// ChunkSummaries mirrors StartSessionResult: every chunk in "summary"
+	// mode, or the over-budget dropped set in "full" mode.
+	ChunkSummaries []InjectedChunkSummary `json:"chunk_summaries,omitempty"`
+	// TotalContentSize is the summed len(content) chars of the full inject set.
+	TotalContentSize int `json:"total_content_size,omitempty"`
+	TruncatedCount   int `json:"truncated_count,omitempty"`
 }
 
 type RegisterFocusInput struct {
@@ -171,6 +199,78 @@ func intersectScopes(a, b []string) []string {
 	return result
 }
 
+// normalizeChunkDetail resolves the chunk_detail param: "" / nil → "full"
+// (back-compat). Anything other than "full" | "summary" is an error.
+func normalizeChunkDetail(raw *string) (string, error) {
+	if raw == nil || *raw == "" {
+		return "full", nil
+	}
+	switch *raw {
+	case "full", "summary":
+		return *raw, nil
+	default:
+		return "", fmt.Errorf("chunk_detail must be \"full\" or \"summary\", got %q", *raw)
+	}
+}
+
+// summarizeInjectedChunks builds content-free descriptors plus the summed
+// content size of the set, so agents can decide what to pull via read_context.
+func summarizeInjectedChunks(chunks []InjectedChunk) ([]InjectedChunkSummary, int) {
+	summaries := make([]InjectedChunkSummary, 0, len(chunks))
+	total := 0
+	for _, c := range chunks {
+		size := len(c.Content)
+		total += size
+		summaries = append(summaries, InjectedChunkSummary{
+			ID:        c.ID,
+			QueryKey:  c.QueryKey,
+			Title:     c.Title,
+			Scope:     c.Scope,
+			ChunkType: c.ChunkType,
+			Size:      size,
+		})
+	}
+	return summaries, total
+}
+
+// totalInjectedSize sums len(content) chars across chunk sets.
+func totalInjectedSize(sets ...[]InjectedChunk) int {
+	total := 0
+	for _, set := range sets {
+		for _, c := range set {
+			total += len(c.Content)
+		}
+	}
+	return total
+}
+
+// validateStartProject ensures an explicitly passed project_id belongs to the
+// org (and to the agent, for agent keys) before a session row is created.
+// Returns a recovery-hinting error naming list_projects.
+func (t *Tools) validateStartProject(ctx context.Context, orgID, agentID string, projectID *string) error {
+	if projectID == nil || *projectID == "" {
+		return nil
+	}
+	var foundOrgID string
+	var name string
+	err := t.pool.QueryRow(ctx, `
+		SELECT org_id, name FROM projects WHERE id = $1
+	`, *projectID).Scan(&foundOrgID, &name)
+	if err != nil || foundOrgID != orgID {
+		return fmt.Errorf("project_id %q is not accessible for this API key — call list_projects to see available project IDs, then retry start_session with a valid project_id (or omit project_id for an agent/org-only session)", *projectID)
+	}
+	if agentID != "" {
+		var hasAccess bool
+		err := t.pool.QueryRow(ctx, `
+			SELECT EXISTS(SELECT 1 FROM agent_projects WHERE agent_id = $1 AND project_id = $2)
+		`, agentID, *projectID).Scan(&hasAccess)
+		if err != nil || !hasAccess {
+			return fmt.Errorf("project_id %q is not accessible for this agent — call list_projects to see available project IDs, then retry start_session with a valid project_id (or omit project_id for an agent/org-only session)", *projectID)
+		}
+	}
+	return nil
+}
+
 func (t *Tools) resolveAgentInjectFilters(ctx context.Context, agentID string) models.AgentTypeFilterConfig {
 	var rawFilters []byte
 	err := t.pool.QueryRow(ctx, `
@@ -228,7 +328,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 	excludeQueryKeys []string,
 	maxInjectTokens int,
 	focusTags []string,
-) ([]InjectedChunk, int, error) {
+) ([]InjectedChunk, []InjectedChunk, error) {
 	args := []any{agentID, orgID, scopes}
 	projectFilter := "AND (cc.scope != 'PROJECT')"
 	if projectID != nil {
@@ -266,7 +366,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 
 	rows, err := t.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("fetchInjectAudienceCandidates: %w", err)
+		return nil, nil, fmt.Errorf("fetchInjectAudienceCandidates: %w", err)
 	}
 	defer rows.Close()
 
@@ -279,7 +379,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 		var rawContent []byte
 		var iaRaw []byte
 		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &rawContent, &c.Scope, &c.ChunkType, &iaRaw, &c.CreatedAt); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 		c.Content = decodeContent(rawContent)
 		candidates = append(candidates, struct {
@@ -288,7 +388,7 @@ func (t *Tools) fetchInjectAudienceCandidates(
 		}{InjectedChunk: c, iaRaw: iaRaw})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 
 	type candidateWithRule struct {
@@ -379,10 +479,9 @@ func (t *Tools) fetchInjectAudienceCandidates(
 		chunks = allMatched
 	}
 
-	truncated := 0
+	var dropped []InjectedChunk
 	if maxInjectTokens > 0 {
 		var kept []InjectedChunk
-		var discarded []InjectedChunk
 		runningTokens := 0
 		for _, chunk := range chunks {
 			estTokens := len(chunk.Content) / 4
@@ -390,14 +489,13 @@ func (t *Tools) fetchInjectAudienceCandidates(
 				kept = append(kept, chunk)
 				runningTokens += estTokens
 			} else {
-				discarded = append(discarded, chunk)
+				dropped = append(dropped, chunk)
 			}
 		}
-		truncated = len(discarded)
 		chunks = kept
 	}
 
-	return chunks, truncated, nil
+	return chunks, dropped, nil
 }
 
 func (t *Tools) cacheInjectSet(ctx context.Context, sessionID string, chunks []InjectedChunk) {
@@ -448,6 +546,15 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		lifecycleSlug = *in.LifecycleSlug
 	}
 
+	detail, err := normalizeChunkDetail(in.ChunkDetail)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := t.validateStartProject(ctx, orgID, in.AgentID, in.ProjectID); err != nil {
+		return nil, err
+	}
+
 	lc, err := t.resolveLifecycle(ctx, orgID, lifecycleSlug)
 	if err != nil {
 		return nil, err
@@ -496,7 +603,7 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 	}
 
 	agentTags := t.resolveAgentTags(ctx, in.AgentID)
-	chunks, truncated, err := t.fetchInjectAudienceCandidates(
+	chunks, dropped, err := t.fetchInjectAudienceCandidates(
 		ctx, in.AgentID, t.resolveAgentType(ctx, in.AgentID), agentTags, &lifecycleSlug, in.ProjectID, orgID, scopes,
 		typeFilters.IncludeChunkTypes,
 		typeFilters.ExcludeChunkTypes,
@@ -511,14 +618,20 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 	t.cacheInjectSet(ctx, sessionID, chunks)
 
 	result := &StartSessionResult{
-		SessionID:      sessionID,
-		ExpiresAt:      expiresAt,
-		Lifecycle:      lc.Slug,
-		RequiredSteps:  lcCfg.RequiredSteps,
-		InjectedChunks: chunks,
+		SessionID:        sessionID,
+		ExpiresAt:        expiresAt,
+		Lifecycle:        lc.Slug,
+		RequiredSteps:    lcCfg.RequiredSteps,
+		TotalContentSize: totalInjectedSize(chunks, dropped),
 	}
-	if truncated > 0 {
-		result.TruncatedCount = truncated
+	if detail == "summary" {
+		result.ChunkSummaries, _ = summarizeInjectedChunks(append(chunks, dropped...))
+	} else {
+		result.InjectedChunks = chunks
+		if len(dropped) > 0 {
+			result.ChunkSummaries, _ = summarizeInjectedChunks(dropped)
+			result.TruncatedCount = len(dropped)
+		}
 	}
 	return result, nil
 }
@@ -531,11 +644,16 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 		return nil, fmt.Errorf("session_id is required")
 	}
 
+	detail, err := normalizeChunkDetail(in.ChunkDetail)
+	if err != nil {
+		return nil, err
+	}
+
 	// Fetch session + lifecycle in one query.
 	var sess models.Session
 	var lcConfig []byte
 	var lcSlug *string
-	err := t.pool.QueryRow(ctx, `
+	err = t.pool.QueryRow(ctx, `
 		SELECT s.id, s.agent_id, s.project_id, s.org_id, s.lifecycle_id,
 		       s.status, s.focus_task, s.focus_tags, s.chunks_written, s.chunks_read,
 		       s.consolidation_done, s.resume_count, s.expires_at,
@@ -592,7 +710,7 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 	}
 
 	agentTags := t.resolveAgentTags(ctx, sess.AgentID)
-	chunks, _, err := t.fetchInjectAudienceCandidates(
+	chunks, dropped, err := t.fetchInjectAudienceCandidates(
 		ctx, sess.AgentID, t.resolveAgentType(ctx, sess.AgentID), agentTags, lcSlug, sess.ProjectID, orgID, scopes,
 		typeFilters.IncludeChunkTypes,
 		typeFilters.ExcludeChunkTypes,
@@ -606,14 +724,24 @@ func (t *Tools) ResumeSession(ctx context.Context, orgID string, in ResumeSessio
 
 	t.cacheInjectSet(ctx, sess.ID, chunks)
 
-	return &ResumeSessionResult{
-		SessionID:      sess.ID,
-		ExpiresAt:      newExpiry,
-		FocusTask:      sess.FocusTask,
-		ChunksWritten:  sess.ChunksWritten,
-		ResumeCount:    sess.ResumeCount + 1,
-		InjectedChunks: chunks,
-	}, nil
+	result := &ResumeSessionResult{
+		SessionID:        sess.ID,
+		ExpiresAt:        newExpiry,
+		FocusTask:        sess.FocusTask,
+		ChunksWritten:    sess.ChunksWritten,
+		ResumeCount:      sess.ResumeCount + 1,
+		TotalContentSize: totalInjectedSize(chunks, dropped),
+	}
+	if detail == "summary" {
+		result.ChunkSummaries, _ = summarizeInjectedChunks(append(chunks, dropped...))
+	} else {
+		result.InjectedChunks = chunks
+		if len(dropped) > 0 {
+			result.ChunkSummaries, _ = summarizeInjectedChunks(dropped)
+			result.TruncatedCount = len(dropped)
+		}
+	}
+	return result, nil
 }
 
 // RegisterFocus records what task the agent is currently working on within a session.
