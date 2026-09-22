@@ -54,13 +54,14 @@ func (h *SessionHandlers) resolveOrgIDFromSession(r *http.Request, sessionID str
 }
 
 // POST /v1/sessions
-// Body: { agent_id, project_id?, lifecycle_slug? }
+// Body: { agent_id, project_id?, lifecycle_slug?, chunk_detail? }
 // agent_id is required in the REST body (JWT/human path — caller specifies which agent).
 func (h *SessionHandlers) StartSession(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		AgentID       string  `json:"agent_id"`
 		ProjectID     *string `json:"project_id,omitempty"`
 		LifecycleSlug *string `json:"lifecycle_slug,omitempty"`
+		ChunkDetail   *string `json:"chunk_detail,omitempty"`
 	}
 	if err := decodeJSONBody(r, &body); err != nil {
 		writeJSONDecodeError(w, err, "")
@@ -78,6 +79,7 @@ func (h *SessionHandlers) StartSession(w http.ResponseWriter, r *http.Request) {
 	in := mcp.StartSessionInput{
 		ProjectID:     body.ProjectID,
 		LifecycleSlug: body.LifecycleSlug,
+		ChunkDetail:   body.ChunkDetail,
 	}
 	result, err := h.tools.StartSession(r.Context(), orgID, body.AgentID, in)
 	if err != nil {
@@ -88,6 +90,7 @@ func (h *SessionHandlers) StartSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /v1/sessions/:id/resume
+// Body (optional): { chunk_detail? }
 func (h *SessionHandlers) ResumeSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	orgID, err := h.resolveOrgIDFromSession(r, sessionID)
@@ -95,7 +98,17 @@ func (h *SessionHandlers) ResumeSession(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", err.Error())
 		return
 	}
-	result, err := h.tools.ResumeSession(r.Context(), orgID, mcp.ResumeSessionInput{SessionID: sessionID})
+	var body struct {
+		ChunkDetail *string `json:"chunk_detail,omitempty"`
+	}
+	// Body is optional — a bare POST resumes with full detail.
+	if r.ContentLength != 0 {
+		if err := decodeJSONBody(r, &body); err != nil {
+			writeJSONDecodeError(w, err, "")
+			return
+		}
+	}
+	result, err := h.tools.ResumeSession(r.Context(), orgID, mcp.ResumeSessionInput{SessionID: sessionID, ChunkDetail: body.ChunkDetail})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "RESUME_FAILED", err.Error())
 		return

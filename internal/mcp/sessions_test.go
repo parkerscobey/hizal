@@ -431,3 +431,91 @@ func TestRegisterFocusResultJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeChunkDetail(t *testing.T) {
+	t.Parallel()
+
+	if got, err := normalizeChunkDetail(nil); err != nil || got != "full" {
+		t.Errorf("nil = %q, %v; want full, nil", got, err)
+	}
+	empty := ""
+	if got, err := normalizeChunkDetail(&empty); err != nil || got != "full" {
+		t.Errorf("empty = %q, %v; want full, nil", got, err)
+	}
+	for _, want := range []string{"full", "summary"} {
+		v := want
+		if got, err := normalizeChunkDetail(&v); err != nil || got != want {
+			t.Errorf("%q = %q, %v; want %q, nil", want, got, err, want)
+		}
+	}
+	bogus := "brief"
+	if _, err := normalizeChunkDetail(&bogus); err == nil {
+		t.Error("bogus chunk_detail should error")
+	}
+}
+
+func TestSummarizeInjectedChunks(t *testing.T) {
+	t.Parallel()
+
+	chunks := []InjectedChunk{
+		{ID: "c1", QueryKey: "k1", Title: "T1", Content: "hello", Scope: "AGENT", ChunkType: "IDENTITY"},
+		{ID: "c2", QueryKey: "k2", Title: "T2", Content: "longer-content", Scope: "PROJECT", ChunkType: "KNOWLEDGE"},
+	}
+	summaries, total := summarizeInjectedChunks(chunks)
+	if total != len("hello")+len("longer-content") {
+		t.Errorf("total = %d, want %d", total, len("hello")+len("longer-content"))
+	}
+	if len(summaries) != 2 {
+		t.Fatalf("summaries len = %d, want 2", len(summaries))
+	}
+	if summaries[0].Size != len("hello") || summaries[0].ID != "c1" || summaries[0].Scope != "AGENT" {
+		t.Errorf("summaries[0] = %+v, want c1/AGENT/size 5", summaries[0])
+	}
+	if totalInjectedSize(chunks, nil) != total {
+		t.Error("totalInjectedSize should match summarize total")
+	}
+	if got := totalInjectedSize(nil, nil); got != 0 {
+		t.Errorf("empty total = %d, want 0", got)
+	}
+}
+
+func TestStartSessionRejectsBadChunkDetail(t *testing.T) {
+	t.Parallel()
+
+	// Validation runs before any DB use, so a pool-less Tools is safe here.
+	tools := &Tools{}
+	bogus := "brief"
+	_, err := tools.StartSession(t.Context(), "org-1", "agent-1", StartSessionInput{ChunkDetail: &bogus})
+	if err == nil {
+		t.Fatal("expected chunk_detail validation error, got nil")
+	}
+	if got := err.Error(); len(got) == 0 || !containsStr(got, "chunk_detail") {
+		t.Errorf("error = %q, want mention of chunk_detail", got)
+	}
+}
+
+func TestResumeSessionRejectsBadChunkDetail(t *testing.T) {
+	t.Parallel()
+
+	tools := &Tools{}
+	bogus := "brief"
+	_, err := tools.ResumeSession(t.Context(), "org-1", ResumeSessionInput{SessionID: "sess-1", ChunkDetail: &bogus})
+	if err == nil {
+		t.Fatal("expected chunk_detail validation error, got nil")
+	}
+	if got := err.Error(); len(got) == 0 || !containsStr(got, "chunk_detail") {
+		t.Errorf("error = %q, want mention of chunk_detail", got)
+	}
+}
+
+func containsStr(haystack, needle string) bool {
+	if len(needle) == 0 {
+		return true
+	}
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}

@@ -327,19 +327,21 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "update_context",
-		Description: "Update an existing context chunk, recording a new version. Scope-aware: works for chunks across all scopes.",
+		Description: "Update an existing context chunk, recording a new version. Scope-aware: works for chunks across all scopes. Pass inject_audience to retarget auto-injection (preserves chunk ID and version history) or clear_inject_audience:true to keep the chunk searchable but never auto-injected.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"id":           map[string]interface{}{"type": "string"},
-				"title":        map[string]interface{}{"type": "string"},
-				"content":      map[string]interface{}{"type": "string"},
-				"source_file":  map[string]interface{}{"type": "string"},
-				"source_lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}},
-				"gotchas":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
-				"related":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
-				"change_note":  map[string]interface{}{"type": "string", "description": "Required: describe what changed"},
-				"visibility":   map[string]interface{}{"type": "string", "enum": []string{"private", "public"}, "description": `Visibility on the public chunk hub. "private" keeps the chunk private; "public" makes it discoverable. Public chunks are never auto-injected.`},
+				"id":                    map[string]interface{}{"type": "string"},
+				"title":                 map[string]interface{}{"type": "string"},
+				"content":               map[string]interface{}{"type": "string"},
+				"source_file":           map[string]interface{}{"type": "string"},
+				"source_lines":          map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer"}},
+				"gotchas":               map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"related":               map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"change_note":           map[string]interface{}{"type": "string", "description": "Required: describe what changed"},
+				"inject_audience":       map[string]interface{}{"type": "object", "description": `DNF targeting spec for auto-injection. Rules are OR'd; conditions within a rule are AND'd. Example: {"rules":[{"focus_tags":["checkout-v2"]}]}. {"rules":[]} never auto-injects. Mutually exclusive with clear_inject_audience.`},
+				"clear_inject_audience": map[string]interface{}{"type": "boolean", "description": "Set true to clear auto-injection (chunk stays searchable, never auto-injected). Mutually exclusive with inject_audience."},
+				"visibility":            map[string]interface{}{"type": "string", "enum": []string{"private", "public"}, "description": `Visibility on the public chunk hub. "private" keeps the chunk private; "public" makes it discoverable. Public chunks are never auto-injected.`},
 			},
 			"required": []string{"id", "change_note"},
 		},
@@ -405,12 +407,13 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "start_session",
-		Description: "Begin a new session for an agent. Returns the session ID and all inject_audience-matching chunks for the agent's context window. Fails if the agent already has an active session — use resume_session instead.",
+		Description: "Begin a new session for an agent. Returns the session ID and all inject_audience-matching chunks for the agent's context window. Fails if the agent already has an active session — use resume_session instead. Pass chunk_detail:\"summary\" for a content-free chunk list (pull full content via read_context); over-budget drops in full mode come back as summaries.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id":     map[string]interface{}{"type": "string", "description": "Primary project UUID for this session (optional)"},
+				"project_id":     map[string]interface{}{"type": "string", "description": "Primary project UUID for this session (optional). If unsure, call list_projects first — an inaccessible ID fails with a recovery hint."},
 				"lifecycle_slug": map[string]interface{}{"type": "string", "description": "Lifecycle preset: default, dev, admin, or org custom slug. Defaults to 'default'."},
+				"chunk_detail":   map[string]interface{}{"type": "string", "enum": []string{"full", "summary"}, "description": "Payload shape for injected chunks: 'full' (default) returns complete content; 'summary' returns id/query_key/title/scope/chunk_type/size only — then pull full content via read_context."},
 			},
 			"required": []string{},
 		},
@@ -426,11 +429,12 @@ var toolList = []toolSchema{
 	},
 	{
 		Name:        "resume_session",
-		Description: "Extend an existing active session's TTL and re-inject matching chunks fresh. Use after a break or when resuming across tool calls.",
+		Description: "Extend an existing active session's TTL and re-inject matching chunks fresh. Use after a break or when resuming across tool calls. Accepts the same chunk_detail summary mode as start_session.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"session_id": map[string]interface{}{"type": "string", "description": "UUID of the active session to resume"},
+				"session_id":   map[string]interface{}{"type": "string", "description": "UUID of the active session to resume"},
+				"chunk_detail": map[string]interface{}{"type": "string", "enum": []string{"full", "summary"}, "description": "Payload shape for injected chunks: 'full' (default) returns complete content; 'summary' returns id/query_key/title/scope/chunk_type/size only."},
 			},
 			"required": []string{"session_id"},
 		},

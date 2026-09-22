@@ -2256,3 +2256,71 @@ func TestAnyOverlap(t *testing.T) {
 		t.Error("nil b should not overlap")
 	}
 }
+
+func TestValidateInjectAudienceRaw(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{
+		`{"rules":[{"all":true}]}`,
+		`{"rules":[{"focus_tags":["checkout-v2"]}]}`,
+		`{"rules":[]}`,
+		`"{\"rules\":[{\"all\":true}]}"`, // double-encoded from MCP clients
+	}
+	for _, raw := range valid {
+		if err := validateInjectAudienceRaw(json.RawMessage(raw)); err != nil {
+			t.Errorf("validateInjectAudienceRaw(%s) = %v, want nil", raw, err)
+		}
+	}
+
+	invalid := []string{
+		``,
+		`null`,
+		`not json`,
+		`{"foo":1}`,
+		`{"rules":"nope"}`,
+		`{"rules":[123]}`,
+		`[]`,
+	}
+	for _, raw := range invalid {
+		if err := validateInjectAudienceRaw(json.RawMessage(raw)); err == nil {
+			t.Errorf("validateInjectAudienceRaw(%s) = nil, want error", raw)
+		}
+	}
+}
+
+func TestUpdateContextInput_InjectAudienceJSON(t *testing.T) {
+	t.Parallel()
+
+	// Omitted: no change to injection.
+	var omitted UpdateContextInput
+	if err := json.Unmarshal([]byte(`{"id":"c1","change_note":"x"}`), &omitted); err != nil {
+		t.Fatal(err)
+	}
+	if omitted.InjectAudience != nil || omitted.ClearInjectAudience != nil {
+		t.Error("omitted fields should stay nil (no injection change)")
+	}
+
+	// Set: retarget injection.
+	var set UpdateContextInput
+	if err := json.Unmarshal([]byte(`{"id":"c1","change_note":"x","inject_audience":{"rules":[{"focus_tags":["checkout-v2"]}]}}`), &set); err != nil {
+		t.Fatal(err)
+	}
+	if set.InjectAudience == nil {
+		t.Fatal("inject_audience should be present")
+	}
+	if err := validateInjectAudienceRaw(*set.InjectAudience); err != nil {
+		t.Errorf("set inject_audience should validate: %v", err)
+	}
+
+	// Clear: search-only, never auto-injected.
+	var clear UpdateContextInput
+	if err := json.Unmarshal([]byte(`{"id":"c1","change_note":"x","clear_inject_audience":true}`), &clear); err != nil {
+		t.Fatal(err)
+	}
+	if clear.ClearInjectAudience == nil || !*clear.ClearInjectAudience {
+		t.Error("clear_inject_audience should be true")
+	}
+	if clear.InjectAudience != nil {
+		t.Error("inject_audience should stay nil when clearing")
+	}
+}

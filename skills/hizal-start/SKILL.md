@@ -22,6 +22,28 @@ hizal__start_session(lifecycle_slug="<slug>")
 Returns a `session_id`. Keep it visible — needed for `register_focus` and `end_session`.
 
 The agent's project and lifecycle context is assumed known. If unsure, check AGENTS.md or ask the user.
+If you don't know the project ID, call `list_projects` first — `start_session` with an
+inaccessible `project_id` fails with a recovery hint telling you to do exactly that.
+Omitting `project_id` is valid (agent/org-only session).
+
+### 2b. Summarize-then-pull (large memory stores)
+
+Full session payloads can hit 50KB+ (dozens of chunks). Prefer summaries first:
+
+```
+hizal__start_session(lifecycle_slug="<slug>", chunk_detail="summary")
+```
+
+Returns `chunk_summaries` (`id, query_key, title, scope, chunk_type, size`) plus
+`total_content_size`, no content. Pull full content only for relevant chunks:
+
+```
+hizal__read_context(id="<chunk-id>")
+```
+
+Same `chunk_detail` param exists on `resume_session`. In `full` (default) mode,
+over-budget drops come back as `chunk_summaries` with `truncated_count` instead
+of being silently dropped — check those fields before assuming you have everything.
 
 ### 3. Register Focus (Optional)
 

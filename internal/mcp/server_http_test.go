@@ -258,3 +258,67 @@ func TestAllWriteToolSchemasExposeInjectAudience(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionToolsExposeChunkDetail(t *testing.T) {
+	t.Parallel()
+
+	// start_session/resume_session support chunk_detail:"summary" so agents
+	// can prune injected context (GH #127). Both schemas must expose it.
+	toolMap := make(map[string]toolSchema)
+	for _, tool := range toolList {
+		toolMap[tool.Name] = tool
+	}
+	for _, name := range []string{"start_session", "resume_session"} {
+		t.Run(name, func(t *testing.T) {
+			tool, ok := toolMap[name]
+			if !ok {
+				t.Fatalf("tool %q not found in toolList", name)
+			}
+			properties, ok := tool.InputSchema["properties"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("%s: properties missing or wrong type", name)
+			}
+			prop, ok := properties["chunk_detail"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("%s: schema missing chunk_detail property", name)
+			}
+			if prop["type"] != "string" {
+				t.Errorf("%s: chunk_detail type = %q, want \"string\"", name, prop["type"])
+			}
+		})
+	}
+}
+
+func TestUpdateContextSchemaExposesInjectAudience(t *testing.T) {
+	t.Parallel()
+
+	// update_context must expose inject_audience + clear_inject_audience so
+	// agents can retarget or clear auto-injection without delete + recreate
+	// (preserves chunk ID and version history). See GH #126.
+	toolMap := make(map[string]toolSchema)
+	for _, tool := range toolList {
+		toolMap[tool.Name] = tool
+	}
+	tool, ok := toolMap["update_context"]
+	if !ok {
+		t.Fatal("tool \"update_context\" not found in toolList")
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("update_context: properties missing or wrong type")
+	}
+	iaProp, ok := properties["inject_audience"].(map[string]interface{})
+	if !ok {
+		t.Fatal("update_context: schema missing inject_audience property")
+	}
+	if iaProp["type"] != "object" {
+		t.Errorf("update_context: inject_audience type = %q, want \"object\"", iaProp["type"])
+	}
+	clearProp, ok := properties["clear_inject_audience"].(map[string]interface{})
+	if !ok {
+		t.Fatal("update_context: schema missing clear_inject_audience property")
+	}
+	if clearProp["type"] != "boolean" {
+		t.Errorf("update_context: clear_inject_audience type = %q, want \"boolean\"", clearProp["type"])
+	}
+}
