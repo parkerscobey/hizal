@@ -77,4 +77,12 @@ hizal__get_context_versions(id="<chunk-uuid>")
 4. **Use query_key** if you already know the key
 5. **If an AGENT memory chunk is broadly useful** — promote it with `write_knowledge` or `write_convention`
 
+## Reading the response filters
+
+Every result carries `applied_scope`, `applied_chunk_type`, and
+`excluded_query_key_prefixes` — the effective filters after server-side
+agent-type narrowing. If results are all one scope and miss what you expect,
+retry with an explicit `scope` (e.g. `scope="PROJECT", project_id="<id>"`):
+your agent type may silently narrow unscoped searches.
+
 See `hizal-write` skill for writing back to Hizal.

@@ -257,6 +257,13 @@ type ChunkResult struct {
 
 type SearchContextResult struct {
 	Results []ChunkResult `json:"results"`
+	// AppliedScope / AppliedChunkType echo the effective filters after
+	// agent-type narrowing, so callers can tell when a filter silently
+	// restricted the search (e.g. retry with an explicit scope).
+	AppliedScope     string `json:"applied_scope,omitempty"`
+	AppliedChunkType string `json:"applied_chunk_type,omitempty"`
+	// ExcludedQueryKeyPrefixes echoes server-side prefix exclusions applied.
+	ExcludedQueryKeyPrefixes []string `json:"excluded_query_key_prefixes,omitempty"`
 }
 
 type ReadContextInput struct {
@@ -888,7 +895,12 @@ func (t *Tools) SearchContext(ctx context.Context, projectID string, in SearchCo
 		}
 	}
 
-	return &SearchContextResult{Results: results}, nil
+	return &SearchContextResult{
+		Results:                  results,
+		AppliedScope:             effectiveScope,
+		AppliedChunkType:         effectiveChunkType,
+		ExcludedQueryKeyPrefixes: typeFilters.ExcludeQueryKeyPrefixes,
+	}, nil
 }
 
 func (t *Tools) ReadContext(ctx context.Context, projectID string, in ReadContextInput) (*ReadContextResult, error) {

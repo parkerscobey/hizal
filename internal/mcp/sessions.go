@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/lib/pq"
 )
 
 // ---- Input/Output types ----
@@ -92,9 +91,28 @@ type RegisterFocusInput struct {
 }
 
 type RegisterFocusResult struct {
-	SessionID            string `json:"session_id"`
-	FocusTask            string `json:"focus_task"`
-	FocusInjectedChunks  int    `json:"focus_injected_chunks"`
+	SessionID string `json:"session_id"`
+	FocusTask string `json:"focus_task"`
+	// FocusInjectedChunks is the total number of focus-tag-matched chunks in
+	// the session inject set after this call (newly added + already present).
+	// Zero now truly means nothing matched — previously it counted only newly
+	// added chunks, so already-injected matches misleadingly reported 0.
+	FocusInjectedChunks int `json:"focus_injected_chunks"`
+	// FocusNewChunks counts chunks newly added to the inject set by this call.
+	FocusNewChunks int `json:"focus_new_chunks,omitempty"`
+	// FocusChunks describes every focus-tag-matched chunk (newly added first),
+	// so the caller gets usable context without an extra search round-trip.
+	FocusChunks []FocusMatchedChunk `json:"focus_chunks,omitempty"`
+}
+
+// FocusMatchedChunk is a content-free descriptor of a focus-tag-matched chunk.
+// Pull full content via read_context.
+type FocusMatchedChunk struct {
+	ID        string `json:"id"`
+	QueryKey  string `json:"query_key"`
+	Title     string `json:"title"`
+	Scope     string `json:"scope"`
+	ChunkType string `json:"chunk_type"`
 }
 
 type EndSessionInput struct {
@@ -774,27 +792,112 @@ func (t *Tools) RegisterFocus(ctx context.Context, orgID string, in RegisterFocu
 		return nil, fmt.Errorf("RegisterFocus: %w", err)
 	}
 
-	focusInjectedCount := 0
-	count, err := t.updateFocusInjectSet(ctx, orgID, in.SessionID, in.Tags)
+	focusResult := &RegisterFocusResult{
+		SessionID: sessionID,
+		FocusTask: in.Task,
+	}
+	upd, err := t.updateFocusInjectSet(ctx, orgID, in.SessionID, in.Tags)
 	if err != nil {
 		log.Printf("focus inject set update failed: %v", err)
 	} else {
-		focusInjectedCount = count
+		focusResult.FocusInjectedChunks = len(upd.Matched)
+		focusResult.FocusNewChunks = len(upd.NewIDs)
+		focusResult.FocusChunks = upd.Matched
 	}
 
-	return &RegisterFocusResult{
-		SessionID:           sessionID,
-		FocusTask:           in.Task,
-		FocusInjectedChunks: focusInjectedCount,
-	}, nil
+	return focusResult, nil
+}
+
+// focusInjectUpdate is the outcome of updateFocusInjectSet: the IDs newly
+// added to the session inject set plus descriptors for every focus-matched
+// chunk (newly added first, then already-present).
+type focusInjectUpdate struct {
+	NewIDs  []string
+	Matched []FocusMatchedChunk
+}
+
+// focusCandidate is one injectable chunk row examined for focus-tag matches.
+type focusCandidate struct {
+	ID        string
+	QueryKey  string
+	Title     string
+	Scope     string
+	ChunkType string
+	IARaw     []byte
+}
+
+// matchFocusTags reports whether any rule in the chunk's inject_audience
+// targets one of the session's focus tags. Malformed payloads never match.
+func matchFocusTags(iaRaw []byte, focusTags []string) bool {
+	if len(focusTags) == 0 || len(iaRaw) == 0 {
+		return false
+	}
+	var ia models.InjectAudience
+	if err := json.Unmarshal(iaRaw, &ia); err != nil {
+		return false
+	}
+	for _, rule := range ia.Rules {
+		if len(rule.FocusTags) > 0 && models.AnyOverlap(rule.FocusTags, focusTags) {
+			return true
+		}
+	}
+	return false
+}
+
+// partitionFocusMatches splits focus-matching candidates into newly-added vs
+// already-in-set IDs, returning the update payload. Pure (no DB) for testing.
+func partitionFocusMatches(currentIDs []string, candidates []focusCandidate, focusTags []string) focusInjectUpdate {
+	alreadyIn := make(map[string]bool, len(currentIDs))
+	for _, id := range currentIDs {
+		alreadyIn[id] = true
+	}
+	upd := focusInjectUpdate{}
+	for _, c := range candidates {
+		if !matchFocusTags(c.IARaw, focusTags) {
+			continue
+		}
+		matched := FocusMatchedChunk{
+			ID:        c.ID,
+			QueryKey:  c.QueryKey,
+			Title:     c.Title,
+			Scope:     c.Scope,
+			ChunkType: c.ChunkType,
+		}
+		upd.Matched = append(upd.Matched, matched)
+		if !alreadyIn[c.ID] {
+			upd.NewIDs = append(upd.NewIDs, c.ID)
+			alreadyIn[c.ID] = true
+		}
+	}
+	// Newly added first: stable, useful ordering for callers.
+	if len(upd.NewIDs) > 0 {
+		isNew := make(map[string]bool, len(upd.NewIDs))
+		for _, id := range upd.NewIDs {
+			isNew[id] = true
+		}
+		ordered := upd.Matched[:0]
+		for _, m := range upd.Matched {
+			if isNew[m.ID] {
+				ordered = append(ordered, m)
+			}
+		}
+		for _, m := range upd.Matched {
+			if !isNew[m.ID] {
+				ordered = append(ordered, m)
+			}
+		}
+		upd.Matched = ordered
+	}
+	return upd
 }
 
 // updateFocusInjectSet finds chunks with focus_tags conditions that match
-// the new focus tags, and adds them to the session's inject_set.
-// Returns the count of newly-added chunks.
-func (t *Tools) updateFocusInjectSet(ctx context.Context, orgID, sessionID string, focusTags []string) (int, error) {
+// the new focus tags, adds the missing ones to the session's inject_set, and
+// returns descriptors for every match (new + already present) so callers get
+// usable context without another round-trip.
+func (t *Tools) updateFocusInjectSet(ctx context.Context, orgID, sessionID string, focusTags []string) (focusInjectUpdate, error) {
 	if len(focusTags) == 0 {
-		return 0, nil
+		return focusInjectUpdate{}, nil
 	}
 
 	var injectSetJSON []byte
@@ -803,7 +906,7 @@ func (t *Tools) updateFocusInjectSet(ctx context.Context, orgID, sessionID strin
 		sessionID, orgID,
 	).Scan(&injectSetJSON)
 	if err != nil {
-		return 0, err
+		return focusInjectUpdate{}, err
 	}
 
 	var currentIDs []string
@@ -811,60 +914,46 @@ func (t *Tools) updateFocusInjectSet(ctx context.Context, orgID, sessionID strin
 		_ = json.Unmarshal(injectSetJSON, &currentIDs)
 	}
 
-	alreadyIn := make(map[string]bool)
-	for _, id := range currentIDs {
-		alreadyIn[id] = true
-	}
-
 	rows, err := t.pool.Query(ctx, `
-		SELECT id, inject_audience
+		SELECT id, query_key, title, scope, chunk_type, inject_audience
 		FROM context_chunks
 		WHERE org_id = $1
 		  AND inject_audience IS NOT NULL
-		  AND id != ALL($2::uuid[])
-	`, orgID, pq.Array(currentIDs))
+	`, orgID)
 	if err != nil {
-		return 0, err
+		return focusInjectUpdate{}, err
 	}
 	defer rows.Close()
 
-	var newIDs []string
+	var candidates []focusCandidate
 	for rows.Next() {
-		var id string
-		var iaJSON []byte
-		if err := rows.Scan(&id, &iaJSON); err != nil {
+		var c focusCandidate
+		if err := rows.Scan(&c.ID, &c.QueryKey, &c.Title, &c.Scope, &c.ChunkType, &c.IARaw); err != nil {
 			continue
 		}
-		var ia models.InjectAudience
-		if err := json.Unmarshal(iaJSON, &ia); err != nil {
-			continue
-		}
-		for _, rule := range ia.Rules {
-			if len(rule.FocusTags) > 0 && models.AnyOverlap(rule.FocusTags, focusTags) {
-				if !alreadyIn[id] {
-					newIDs = append(newIDs, id)
-					alreadyIn[id] = true
-				}
-				break
-			}
-		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return focusInjectUpdate{}, err
 	}
 
-	if len(newIDs) == 0 {
-		return 0, nil
+	upd := partitionFocusMatches(currentIDs, candidates, focusTags)
+
+	if len(upd.NewIDs) == 0 {
+		return upd, nil
 	}
 
-	allIDs := append(currentIDs, newIDs...)
+	allIDs := append(currentIDs, upd.NewIDs...)
 	allIDsJSON, _ := json.Marshal(allIDs)
 	_, err = t.pool.Exec(ctx,
 		`UPDATE sessions SET inject_set = $1 WHERE id = $2 AND org_id = $3`,
 		allIDsJSON, sessionID, orgID,
 	)
 	if err != nil {
-		return 0, err
+		return focusInjectUpdate{}, err
 	}
 
-	return len(newIDs), nil
+	return upd, nil
 }
 
 // EndSession closes the session and returns the chunks written during it

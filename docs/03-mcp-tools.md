@@ -69,6 +69,11 @@ Tell Hizal what you're working on. Enables future SSE notifications when other a
 }
 ```
 
+**Output:** `focus_chunks` (every focus-tag-matched chunk, newly added first —
+`id, query_key, title, scope, chunk_type`; pull content via `read_context`),
+`focus_injected_chunks` (total matched — `0` truly means nothing matched),
+`focus_new_chunks` (newly added to the inject set).
+
 ### end_session
 
 End the current session. Returns MEMORY-typed chunks written during the session for review and promotion.
@@ -264,6 +269,11 @@ Semantic search across accessible chunks. Supports filtering by scope, chunk typ
   "total": 3
 }
 ```
+
+Every response also echoes `applied_scope`, `applied_chunk_type`, and
+`excluded_query_key_prefixes` — the effective filters after server-side
+agent-type narrowing. If results skew to one scope, retry with an explicit
+`scope` (agent types can silently narrow unscoped searches).
 
 ### read_context
 
