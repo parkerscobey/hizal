@@ -446,6 +446,8 @@ Update a context chunk. Creates a new version, preserving history.
   "source_lines": [42, 90],
   "gotchas": ["Token expiry checked server-side", "New gotcha discovered"],
   "related": ["other-chunk-id"],
+  "inject_audience": {"rules": [{"focus_tags": ["checkout-v2"]}]},
+  "clear_inject_audience": false,
   "change_note": "Updated after code review revealed edge case"
 }
 ```
@@ -458,6 +460,8 @@ Update a context chunk. Creates a new version, preserving history.
 | `source_lines` | [int, int] | — | Updated line range |
 | `gotchas` | string[] | — | Replaces existing gotchas |
 | `related` | string[] | — | Replaces existing related IDs |
+| `inject_audience` | object | — | Retarget auto-injection (`{"rules":[...]}`); `{"rules":[]}` never injects; mutually exclusive with `clear_inject_audience` |
+| `clear_inject_audience` | boolean | — | `true` clears auto-injection (searchable, never injected); mutually exclusive with `inject_audience` |
 | `change_note` | string | ✅ | Why this was updated |
 
 **Response 200:**

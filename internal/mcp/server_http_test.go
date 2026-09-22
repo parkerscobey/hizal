@@ -288,3 +288,37 @@ func TestSessionToolsExposeChunkDetail(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateContextSchemaExposesInjectAudience(t *testing.T) {
+	t.Parallel()
+
+	// update_context must expose inject_audience + clear_inject_audience so
+	// agents can retarget or clear auto-injection without delete + recreate
+	// (preserves chunk ID and version history). See GH #126.
+	toolMap := make(map[string]toolSchema)
+	for _, tool := range toolList {
+		toolMap[tool.Name] = tool
+	}
+	tool, ok := toolMap["update_context"]
+	if !ok {
+		t.Fatal("tool \"update_context\" not found in toolList")
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("update_context: properties missing or wrong type")
+	}
+	iaProp, ok := properties["inject_audience"].(map[string]interface{})
+	if !ok {
+		t.Fatal("update_context: schema missing inject_audience property")
+	}
+	if iaProp["type"] != "object" {
+		t.Errorf("update_context: inject_audience type = %q, want \"object\"", iaProp["type"])
+	}
+	clearProp, ok := properties["clear_inject_audience"].(map[string]interface{})
+	if !ok {
+		t.Fatal("update_context: schema missing clear_inject_audience property")
+	}
+	if clearProp["type"] != "boolean" {
+		t.Errorf("update_context: clear_inject_audience type = %q, want \"boolean\"", clearProp["type"])
+	}
+}
