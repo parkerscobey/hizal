@@ -30,17 +30,23 @@ Start a new agent work session. Returns a `session_id` and triggers injection of
 ```json
 {
   "lifecycle_slug": "dev",       // optional: agent type preset (dev, admin, research, orchestrator)
-  "project_id": "uuid"           // optional: primary project for this session
+  "project_id": "uuid",          // optional: primary project for this session (call list_projects first if unsure)
+  "chunk_detail": "summary"      // optional: "full" (default) or "summary"
 }
 ```
 
-**Output:** `{ "session_id": "uuid" }`
+**Output:** `{ "session_id": "uuid", ... }`
+
+**Summarize-then-pull:** with `"chunk_detail": "summary"`, the result carries `chunk_summaries`
+(`id, query_key, title, scope, chunk_type, size`) plus `total_content_size` and no content —
+pull full content for relevant chunks via `read_context`. In `full` mode, over-budget drops
+return as `chunk_summaries` with `truncated_count` instead of silent drops.
 
 ### resume_session
 
 Resume a previously started session (e.g., after agent restart).
 
-**Input:** `{ "session_id": "uuid" }`
+**Input:** `{ "session_id": "uuid", "chunk_detail": "summary" }` (`chunk_detail` optional, same semantics as `start_session`).
 
 ### get_active_session
 

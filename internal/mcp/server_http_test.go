@@ -258,3 +258,33 @@ func TestAllWriteToolSchemasExposeInjectAudience(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionToolsExposeChunkDetail(t *testing.T) {
+	t.Parallel()
+
+	// start_session/resume_session support chunk_detail:"summary" so agents
+	// can prune injected context (GH #127). Both schemas must expose it.
+	toolMap := make(map[string]toolSchema)
+	for _, tool := range toolList {
+		toolMap[tool.Name] = tool
+	}
+	for _, name := range []string{"start_session", "resume_session"} {
+		t.Run(name, func(t *testing.T) {
+			tool, ok := toolMap[name]
+			if !ok {
+				t.Fatalf("tool %q not found in toolList", name)
+			}
+			properties, ok := tool.InputSchema["properties"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("%s: properties missing or wrong type", name)
+			}
+			prop, ok := properties["chunk_detail"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("%s: schema missing chunk_detail property", name)
+			}
+			if prop["type"] != "string" {
+				t.Errorf("%s: chunk_detail type = %q, want \"string\"", name, prop["type"])
+			}
+		})
+	}
+}
