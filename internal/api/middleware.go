@@ -44,7 +44,7 @@ func APIKeyAuth(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 
 			// Look up the key — org_id is denormalized so no JOIN needed.
 			row := pool.QueryRow(r.Context(), `
-				SELECT id, org_id, scope_all_projects, allowed_project_ids
+				SELECT id, org_id, agent_id, scope_all_projects, allowed_project_ids
 				FROM api_keys
 				WHERE key_hash = $1
 			`, keyHash)
@@ -52,12 +52,17 @@ func APIKeyAuth(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 			var (
 				keyID      string
 				orgID      string
+				agentID    *string
 				scopeAll   bool
 				allowedIDs []string
 			)
-			if err := row.Scan(&keyID, &orgID, &scopeAll, &allowedIDs); err != nil {
+			if err := row.Scan(&keyID, &orgID, &agentID, &scopeAll, &allowedIDs); err != nil {
 				writeAuthError(w, http.StatusUnauthorized, "AUTH_INVALID", "invalid API key")
 				return
+			}
+			authAgentID := ""
+			if agentID != nil {
+				authAgentID = *agentID
 			}
 
 			// Resolve project_id
@@ -81,6 +86,7 @@ func APIKeyAuth(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 				OrgID:            orgID,
 				ProjectID:        projectID,
 				KeyID:            keyID,
+				AgentID:          authAgentID,
 				ScopeAllProjects: scopeAll,
 				AllowedProjects:  allowedIDs,
 			}

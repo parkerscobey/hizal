@@ -153,6 +153,25 @@ func (h *Handlers) ReadContext(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+// GET /v1/context/identity?agent_id=<uuid>
+func (h *Handlers) GetIdentity(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agent_id")
+	orgID := ""
+	if claims, ok := ClaimsFrom(r.Context()); ok {
+		orgID = claims.OrgID
+		if claims.AgentID != "" {
+			agentID = claims.AgentID
+		}
+	}
+
+	result, err := h.tools.GetIdentity(r.Context(), mcp.GetIdentityInput{AgentID: agentID, OrgID: orgID})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "GET_IDENTITY_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // GET /v1/context/:id/versions
 func (h *Handlers) GetContextVersions(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

@@ -15,6 +15,7 @@ type AuthClaims struct {
 	OrgID            string
 	ProjectID        string // resolved project scope (may be empty if scope_all_projects)
 	KeyID            string
+	AgentID          string // set for agent-owned API keys
 	ScopeAllProjects bool
 	AllowedProjects  []string
 }
