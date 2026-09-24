@@ -289,6 +289,35 @@ func TestSessionToolsExposeChunkDetail(t *testing.T) {
 	}
 }
 
+func TestGetIdentityToolSchema(t *testing.T) {
+	t.Parallel()
+
+	toolMap := make(map[string]toolSchema)
+	for _, tool := range toolList {
+		toolMap[tool.Name] = tool
+	}
+	tool, ok := toolMap["get_identity"]
+	if !ok {
+		t.Fatal("get_identity tool schema not found")
+	}
+
+	properties, ok := tool.InputSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("get_identity properties missing or wrong type")
+	}
+	if _, ok := properties["agent_id"]; !ok {
+		t.Fatal("get_identity schema missing optional agent_id")
+	}
+
+	required, ok := tool.InputSchema["required"].([]string)
+	if !ok {
+		t.Fatal("get_identity required field malformed")
+	}
+	if len(required) != 0 {
+		t.Fatalf("get_identity required = %v, want no required fields", required)
+	}
+}
+
 func TestUpdateContextSchemaExposesInjectAudience(t *testing.T) {
 	t.Parallel()
 

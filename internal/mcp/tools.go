@@ -32,106 +32,106 @@ const (
 // ---- Input types for purpose-built write tools ----
 
 type WriteIdentityInput struct {
-	AgentID        string                    `json:"agent_id"`
-	QueryKey       string                    `json:"query_key"`
-	Title          string                    `json:"title"`
-	Content        string                    `json:"content"`
-	SourceFile     string                    `json:"source_file,omitempty"`
-	SourceLines    [2]int                    `json:"source_lines,omitempty"`
-	Gotchas        []string                  `json:"gotchas,omitempty"`
-	Related        []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
-	Visibility     string                    `json:"visibility,omitempty"`
-	CustomFields   map[string]any            `json:"custom_fields,omitempty"`
+	AgentID        string                 `json:"agent_id"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	SourceFile     string                 `json:"source_file,omitempty"`
+	SourceLines    [2]int                 `json:"source_lines,omitempty"`
+	Gotchas        []string               `json:"gotchas,omitempty"`
+	Related        []string               `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
 }
 
 type WriteMemoryInput struct {
-	AgentID        string                    `json:"agent_id"`
-	QueryKey       string                    `json:"query_key"`
-	Title          string                    `json:"title"`
-	Content        string                    `json:"content"`
-	SourceFile     string                    `json:"source_file,omitempty"`
-	SourceLines    [2]int                    `json:"source_lines,omitempty"`
-	Gotchas        []string                  `json:"gotchas,omitempty"`
-	Related        []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
-	Visibility     string                    `json:"visibility,omitempty"`
-	CustomFields   map[string]any            `json:"custom_fields,omitempty"`
+	AgentID        string                 `json:"agent_id"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	SourceFile     string                 `json:"source_file,omitempty"`
+	SourceLines    [2]int                 `json:"source_lines,omitempty"`
+	Gotchas        []string               `json:"gotchas,omitempty"`
+	Related        []string               `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
 }
 
 type WriteKnowledgeInput struct {
-	ProjectID      string                    `json:"project_id"`
-	QueryKey       string                    `json:"query_key"`
-	Title          string                    `json:"title"`
-	Content        string                    `json:"content"`
-	SourceFile     string                    `json:"source_file,omitempty"`
-	SourceLines    [2]int                    `json:"source_lines,omitempty"`
-	Gotchas        []string                  `json:"gotchas,omitempty"`
-	Related        []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
-	Visibility     string                    `json:"visibility,omitempty"`
-	CustomFields   map[string]any            `json:"custom_fields,omitempty"`
+	ProjectID      string                 `json:"project_id"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	SourceFile     string                 `json:"source_file,omitempty"`
+	SourceLines    [2]int                 `json:"source_lines,omitempty"`
+	Gotchas        []string               `json:"gotchas,omitempty"`
+	Related        []string               `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
 }
 
 type WriteConventionInput struct {
-	ProjectID      string                    `json:"project_id"`
-	QueryKey       string                    `json:"query_key"`
-	Title          string                    `json:"title"`
-	Content        string                    `json:"content"`
-	SourceFile     string                    `json:"source_file,omitempty"`
-	SourceLines    [2]int                    `json:"source_lines,omitempty"`
-	Gotchas        []string                  `json:"gotchas,omitempty"`
-	Related        []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
-	Visibility     string                    `json:"visibility,omitempty"`
-	CustomFields   map[string]any            `json:"custom_fields,omitempty"`
+	ProjectID      string                 `json:"project_id"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	SourceFile     string                 `json:"source_file,omitempty"`
+	SourceLines    [2]int                 `json:"source_lines,omitempty"`
+	Gotchas        []string               `json:"gotchas,omitempty"`
+	Related        []string               `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
 }
 
 type WriteOrgKnowledgeInput struct {
-	OrgID          string                    `json:"org_id"`
-	QueryKey       string                    `json:"query_key"`
-	Title          string                    `json:"title"`
-	Content        string                    `json:"content"`
-	SourceFile     string                    `json:"source_file,omitempty"`
-	SourceLines    [2]int                    `json:"source_lines,omitempty"`
-	Gotchas        []string                  `json:"gotchas,omitempty"`
-	Related        []string                  `json:"related,omitempty"`
-	InjectAudience *models.InjectAudience    `json:"inject_audience,omitempty"`
-	Visibility     string                    `json:"visibility,omitempty"`
-	CustomFields   map[string]any            `json:"custom_fields,omitempty"`
+	OrgID          string                 `json:"org_id"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	SourceFile     string                 `json:"source_file,omitempty"`
+	SourceLines    [2]int                 `json:"source_lines,omitempty"`
+	Gotchas        []string               `json:"gotchas,omitempty"`
+	Related        []string               `json:"related,omitempty"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
 }
 
 type StorePrincipleInput struct {
-	OrgID            string                    `json:"org_id"`
-	QueryKey         string                    `json:"query_key"`
-	Title            string                    `json:"title"`
-	Content          string                    `json:"content"`
-	PromotedByUserID string                    `json:"promoted_by_user_id"`
-	SourceFile       string                    `json:"source_file,omitempty"`
-	SourceLines      [2]int                    `json:"source_lines,omitempty"`
-	Gotchas          []string                  `json:"gotchas,omitempty"`
-	Related          []string                  `json:"related,omitempty"`
-	InjectAudience   *models.InjectAudience    `json:"inject_audience,omitempty"`
-	Visibility       string                    `json:"visibility,omitempty"`
-	CustomFields     map[string]any            `json:"custom_fields,omitempty"`
+	OrgID            string                 `json:"org_id"`
+	QueryKey         string                 `json:"query_key"`
+	Title            string                 `json:"title"`
+	Content          string                 `json:"content"`
+	PromotedByUserID string                 `json:"promoted_by_user_id"`
+	SourceFile       string                 `json:"source_file,omitempty"`
+	SourceLines      [2]int                 `json:"source_lines,omitempty"`
+	Gotchas          []string               `json:"gotchas,omitempty"`
+	Related          []string               `json:"related,omitempty"`
+	InjectAudience   *models.InjectAudience `json:"inject_audience,omitempty"`
+	Visibility       string                 `json:"visibility,omitempty"`
+	CustomFields     map[string]any         `json:"custom_fields,omitempty"`
 }
 
 type WriteChunkInput struct {
-	Type            string           `json:"type"`
-	QueryKey        string           `json:"query_key"`
-	Title           string           `json:"title"`
-	Content         string           `json:"content"`
-	ProjectID       string           `json:"project_id,omitempty"`
-	AgentID         string           `json:"agent_id,omitempty"`
-	OrgID           string           `json:"org_id,omitempty"`
-	InjectAudience  *json.RawMessage `json:"inject_audience,omitempty"`
-	Scope           string           `json:"scope,omitempty"`
-	SourceFile      string           `json:"source_file,omitempty"`
-	SourceLines     [2]int           `json:"source_lines,omitempty"`
-	Gotchas         []string         `json:"gotchas,omitempty"`
-	Related         []string         `json:"related,omitempty"`
-	Visibility      string           `json:"visibility,omitempty"`
-	CustomFields    map[string]any   `json:"custom_fields,omitempty"`
+	Type           string           `json:"type"`
+	QueryKey       string           `json:"query_key"`
+	Title          string           `json:"title"`
+	Content        string           `json:"content"`
+	ProjectID      string           `json:"project_id,omitempty"`
+	AgentID        string           `json:"agent_id,omitempty"`
+	OrgID          string           `json:"org_id,omitempty"`
+	InjectAudience *json.RawMessage `json:"inject_audience,omitempty"`
+	Scope          string           `json:"scope,omitempty"`
+	SourceFile     string           `json:"source_file,omitempty"`
+	SourceLines    [2]int           `json:"source_lines,omitempty"`
+	Gotchas        []string         `json:"gotchas,omitempty"`
+	Related        []string         `json:"related,omitempty"`
+	Visibility     string           `json:"visibility,omitempty"`
+	CustomFields   map[string]any   `json:"custom_fields,omitempty"`
 }
 
 // computeFreshness returns a score multiplier in [FreshnessMin, 1.0] based on
@@ -190,15 +190,15 @@ type WriteContextInput struct {
 }
 
 type WriteContextResult struct {
-	ID              string                  `json:"id"`
-	Scope           string                  `json:"scope"`
-	InjectAudience  *models.InjectAudience   `json:"inject_audience"`
-	ChunkType       string                  `json:"chunk_type"`
-	QueryKey        string                  `json:"query_key"`
-	Title           string                  `json:"title"`
-	Visibility      string                  `json:"visibility,omitempty"`
-	CustomFields    map[string]any          `json:"custom_fields,omitempty"`
-	CreatedAt       time.Time               `json:"created_at"`
+	ID             string                 `json:"id"`
+	Scope          string                 `json:"scope"`
+	InjectAudience *models.InjectAudience `json:"inject_audience"`
+	ChunkType      string                 `json:"chunk_type"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
 }
 
 type SearchContextInput struct {
@@ -232,27 +232,27 @@ type StaleSignal struct {
 }
 
 type ChunkResult struct {
-	ID             string                  `json:"id"`
-	Scope          string                  `json:"scope"`
-	AgentID        *string                 `json:"agent_id,omitempty"`
-	OrgID          *string                 `json:"org_id,omitempty"`
-	InjectAudience *models.InjectAudience  `json:"inject_audience,omitempty"`
-	ChunkType      string                  `json:"chunk_type"`
-	QueryKey       string                  `json:"query_key"`
-	Title          string                  `json:"title"`
-	Content        string                  `json:"content"`
-	SourceFile     string                  `json:"source_file,omitempty"`
-	SourceLines    []int                   `json:"source_lines,omitempty"`
-	Gotchas        []string                `json:"gotchas,omitempty"`
-	Related        []string                `json:"related,omitempty"`
-	CustomFields   map[string]any          `json:"custom_fields,omitempty"`
-	Visibility     string                  `json:"visibility,omitempty"`
-	Score          *float64                `json:"score"`
-	Freshness      float64                 `json:"freshness,omitempty"`
-	StaleSignals   []StaleSignal           `json:"stale_signals,omitempty"`
-	Version        int                     `json:"version,omitempty"`
-	CreatedAt      time.Time               `json:"created_at"`
-	UpdatedAt      time.Time               `json:"updated_at"`
+	ID             string                 `json:"id"`
+	Scope          string                 `json:"scope"`
+	AgentID        *string                `json:"agent_id,omitempty"`
+	OrgID          *string                `json:"org_id,omitempty"`
+	InjectAudience *models.InjectAudience `json:"inject_audience,omitempty"`
+	ChunkType      string                 `json:"chunk_type"`
+	QueryKey       string                 `json:"query_key"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	SourceFile     string                 `json:"source_file,omitempty"`
+	SourceLines    []int                  `json:"source_lines,omitempty"`
+	Gotchas        []string               `json:"gotchas,omitempty"`
+	Related        []string               `json:"related,omitempty"`
+	CustomFields   map[string]any         `json:"custom_fields,omitempty"`
+	Visibility     string                 `json:"visibility,omitempty"`
+	Score          *float64               `json:"score"`
+	Freshness      float64                `json:"freshness,omitempty"`
+	StaleSignals   []StaleSignal          `json:"stale_signals,omitempty"`
+	Version        int                    `json:"version,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
 type SearchContextResult struct {
@@ -285,17 +285,30 @@ type ReadContextResult struct {
 }
 
 type ListChunksInput struct {
-	ProjectID    string                 `json:"project_id,omitempty"`
-	ChunkType    string                 `json:"chunk_type,omitempty"`
-	CustomFields map[string]any         `json:"custom_fields,omitempty"`
-	Scope        string                 `json:"scope,omitempty"`
-	AgentID      string                 `json:"agent_id,omitempty"`
-	Sort         string                 `json:"sort,omitempty"`
-	Limit        int                    `json:"limit,omitempty"`
-	Offset       int                    `json:"offset,omitempty"`
+	ProjectID    string         `json:"project_id,omitempty"`
+	ChunkType    string         `json:"chunk_type,omitempty"`
+	CustomFields map[string]any `json:"custom_fields,omitempty"`
+	Scope        string         `json:"scope,omitempty"`
+	AgentID      string         `json:"agent_id,omitempty"`
+	Sort         string         `json:"sort,omitempty"`
+	Limit        int            `json:"limit,omitempty"`
+	Offset       int            `json:"offset,omitempty"`
 }
 
 type ListChunksResult struct {
+	Chunks []ChunkResult `json:"chunks"`
+	Total  int           `json:"total"`
+}
+
+type GetIdentityInput struct {
+	// AgentID is optional at the MCP/API boundary for agent-owned keys, where it
+	// is resolved from the authenticated caller. Tools callers must pass it.
+	AgentID string `json:"agent_id,omitempty"`
+	// OrgID is resolved from auth and limits orchestrator/admin lookups.
+	OrgID string `json:"-"`
+}
+
+type GetIdentityResult struct {
 	Chunks []ChunkResult `json:"chunks"`
 	Total  int           `json:"total"`
 }
@@ -558,8 +571,8 @@ func validateFieldValue(field models.CustomFieldDefinition, value any) error {
 }
 
 type ChunkTypeDefaults struct {
-	DefaultScope             string
-	DefaultInjectAudience    *models.InjectAudience
+	DefaultScope          string
+	DefaultInjectAudience *models.InjectAudience
 }
 
 func resolveChunkTypeDefaults(ctx context.Context, pool *pgxpool.Pool, orgID *string, slug string) (ChunkTypeDefaults, error) {
@@ -716,15 +729,15 @@ func (t *Tools) WriteContext(ctx context.Context, projectID string, in WriteCont
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        scope,
+		ID:             id,
+		Scope:          scope,
 		InjectAudience: effectiveInjectAudience,
-		ChunkType:    chunkType,
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      chunkType,
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -1024,6 +1037,52 @@ func (t *Tools) ListChunks(ctx context.Context, projectID, orgID string, in List
 	}
 
 	return &ListChunksResult{Chunks: chunks, Total: total}, nil
+}
+
+func (t *Tools) GetIdentity(ctx context.Context, in GetIdentityInput) (*GetIdentityResult, error) {
+	if in.AgentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	args := []any{in.AgentID}
+	orgClause := ""
+	if in.OrgID != "" {
+		args = append(args, in.OrgID)
+		orgClause = fmt.Sprintf("AND EXISTS (SELECT 1 FROM agents a WHERE a.id = cc.agent_id AND a.org_id = $%d)", len(args))
+	}
+
+	query := fmt.Sprintf(`
+		SELECT cc.id, cc.project_id, cc.scope, cc.agent_id, cc.org_id, cc.inject_audience, cc.visibility, cc.chunk_type,
+		       cc.query_key, cc.title, cc.content, NULL::text AS embedding, cc.source_file, cc.source_lines,
+		       cc.gotchas, cc.related, cc.custom_fields, cc.created_by_agent, cc.created_at, cc.updated_at,
+		       COALESCE((SELECT MAX(version) FROM context_versions WHERE chunk_id = cc.id), 1) AS version
+		FROM context_chunks cc
+		WHERE cc.scope = 'AGENT'
+		  AND cc.chunk_type = 'IDENTITY'
+		  AND cc.agent_id = $1
+		  %s
+		ORDER BY cc.updated_at DESC
+	`, orgClause)
+
+	rows, err := pool(t).Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get identity query: %w", err)
+	}
+	defer rows.Close()
+
+	chunks := []ChunkResult{}
+	for rows.Next() {
+		chunk, version, err := scanChunkReadRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		chunks = append(chunks, readContextResultFromModel(chunk, version))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &GetIdentityResult{Chunks: chunks, Total: len(chunks)}, nil
 }
 
 func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateContextInput) (*UpdateContextResult, error) {
@@ -1458,15 +1517,15 @@ func (t *Tools) WriteIdentity(ctx context.Context, in WriteIdentityInput) (*Writ
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        defaults.DefaultScope,
+		ID:             id,
+		Scope:          defaults.DefaultScope,
 		InjectAudience: effectiveIA,
-		ChunkType:    "IDENTITY",
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      "IDENTITY",
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -1536,15 +1595,15 @@ func (t *Tools) WriteMemory(ctx context.Context, in WriteMemoryInput) (*WriteCon
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        defaults.DefaultScope,
+		ID:             id,
+		Scope:          defaults.DefaultScope,
 		InjectAudience: effectiveIA,
-		ChunkType:    "MEMORY",
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      "MEMORY",
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -1627,15 +1686,15 @@ func (t *Tools) WriteKnowledge(ctx context.Context, projectID string, in WriteKn
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        defaults.DefaultScope,
+		ID:             id,
+		Scope:          defaults.DefaultScope,
 		InjectAudience: effectiveIA,
-		ChunkType:    "KNOWLEDGE",
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      "KNOWLEDGE",
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -1718,15 +1777,15 @@ func (t *Tools) WriteConvention(ctx context.Context, projectID string, in WriteC
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        defaults.DefaultScope,
+		ID:             id,
+		Scope:          defaults.DefaultScope,
 		InjectAudience: effectiveIA,
-		ChunkType:    "CONVENTION",
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      "CONVENTION",
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -1796,15 +1855,15 @@ func (t *Tools) WriteOrgKnowledge(ctx context.Context, orgID string, in WriteOrg
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        "ORG",
+		ID:             id,
+		Scope:          "ORG",
 		InjectAudience: effectiveIA,
-		ChunkType:    "KNOWLEDGE",
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      "KNOWLEDGE",
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -1878,15 +1937,15 @@ func (t *Tools) StorePrinciple(ctx context.Context, orgID string, in StorePrinci
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        "ORG",
+		ID:             id,
+		Scope:          "ORG",
 		InjectAudience: effectiveIA,
-		ChunkType:    "PRINCIPLE",
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      "PRINCIPLE",
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -2017,15 +2076,15 @@ func (t *Tools) WriteChunk(ctx context.Context, projectID string, in WriteChunkI
 	}
 
 	return &WriteContextResult{
-		ID:           id,
-		Scope:        effectiveScope,
+		ID:             id,
+		Scope:          effectiveScope,
 		InjectAudience: effectiveInjectAudience,
-		ChunkType:    in.Type,
-		QueryKey:     in.QueryKey,
-		Title:        in.Title,
-		Visibility:   vis,
-		CustomFields: effectiveCustomFields,
-		CreatedAt:    createdAt,
+		ChunkType:      in.Type,
+		QueryKey:       in.QueryKey,
+		Title:          in.Title,
+		Visibility:     vis,
+		CustomFields:   effectiveCustomFields,
+		CreatedAt:      createdAt,
 	}, nil
 }
 
@@ -2412,20 +2471,20 @@ func chunkResultFromModel(chunk models.ContextChunk, version int, score *float64
 	}
 
 	return ChunkResult{
-		ID:          chunk.ID,
-		QueryKey:    chunk.QueryKey,
-		Title:       chunk.Title,
-		Content:     decodeContent(chunk.Content),
-		SourceFile:  sourceFile,
-		SourceLines: decodeSourceLines(chunk.SourceLines),
-		Gotchas:     decodeStringSlice(chunk.Gotchas),
-		Related:     decodeStringSlice(chunk.Related),
+		ID:           chunk.ID,
+		QueryKey:     chunk.QueryKey,
+		Title:        chunk.Title,
+		Content:      decodeContent(chunk.Content),
+		SourceFile:   sourceFile,
+		SourceLines:  decodeSourceLines(chunk.SourceLines),
+		Gotchas:      decodeStringSlice(chunk.Gotchas),
+		Related:      decodeStringSlice(chunk.Related),
 		CustomFields: chunk.CustomFields,
-		Visibility:  chunk.Visibility,
-		Score:       score,
-		Version:     version,
-		CreatedAt:   chunk.CreatedAt,
-		UpdatedAt:   chunk.UpdatedAt,
+		Visibility:   chunk.Visibility,
+		Score:        score,
+		Version:      version,
+		CreatedAt:    chunk.CreatedAt,
+		UpdatedAt:    chunk.UpdatedAt,
 	}
 }
 

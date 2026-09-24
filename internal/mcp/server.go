@@ -313,6 +313,17 @@ var toolList = []toolSchema{
 		},
 	},
 	{
+		Name:        "get_identity",
+		Description: "Return only AGENT-scoped IDENTITY chunks for the calling agent. Does not start, resume, or mutate a session. Orchestrator/admin callers may pass agent_id when permitted.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"agent_id": map[string]interface{}{"type": "string", "description": "Optional agent UUID. Agent-owned API keys are always restricted to their own agent; org/admin keys may pass an agent_id."},
+			},
+			"required": []string{},
+		},
+	},
+	{
 		Name:        "read_context",
 		Description: "Fetch a context chunk by ID or query_key including version history. If both are provided, id wins. Scope-aware: works for PROJECT, AGENT, and ORG chunks.",
 		InputSchema: map[string]interface{}{
@@ -967,6 +978,23 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, false)
 		}
 		return result, err
+
+	case "get_identity":
+		var in GetIdentityInput
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, fmt.Errorf("invalid arguments: %w", err)
+		}
+		scope, err := s.loadAPIKeyScope(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		// Security: agents can only retrieve their own identity chunks.
+		// Org-level API keys (scope.AgentID == nil) can pass an agent_id.
+		if scope.AgentID != nil {
+			in.AgentID = *scope.AgentID
+		}
+		in.OrgID = scope.OrgID
+		return s.tools.GetIdentity(ctx, in)
 
 	case "read_context":
 		var in ReadContextInput

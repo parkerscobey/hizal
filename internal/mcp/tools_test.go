@@ -112,8 +112,8 @@ func TestScanChunkSearchRow(t *testing.T) {
 		&createdByAgent,
 		createdAt,
 		updatedAt,
-		2,       // version
-		0.88,    // cosine score
+		2,    // version
+		0.88, // cosine score
 		lastReviewAt,
 		"private", // visibility
 	}}
@@ -928,14 +928,110 @@ func TestListChunksScopeAwareAccessibility(t *testing.T) {
 	})
 }
 
+func TestGetIdentityReturnsOnlyAgentIdentityChunks(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New() error = %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	tools := &Tools{pool: pool, embed: nil}
+
+	orgID := uuid.NewString()
+	orgSlug := "get-identity-org-" + strings.ToLower(uuid.NewString())
+	userID := uuid.NewString()
+	agentID := uuid.NewString()
+	otherAgentID := uuid.NewString()
+	agentSlug := "get-identity-agent-" + strings.ToLower(uuid.NewString())
+	otherAgentSlug := "get-identity-other-agent-" + strings.ToLower(uuid.NewString())
+	identityID := uuid.NewString()
+	memoryID := uuid.NewString()
+	otherIdentityID := uuid.NewString()
+	orgIdentityID := uuid.NewString()
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM context_chunks WHERE id = ANY($1::uuid[])`, []string{identityID, memoryID, otherIdentityID, orgIdentityID})
+		_, _ = pool.Exec(ctx, `DELETE FROM agents WHERE id = ANY($1::uuid[])`, []string{agentID, otherAgentID})
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+		_, _ = pool.Exec(ctx, `DELETE FROM orgs WHERE id = $1`, orgID)
+	})
+
+	if _, err := pool.Exec(ctx, `INSERT INTO orgs (id, name, slug) VALUES ($1, $2, $3)`, orgID, "Get Identity Test Org", orgSlug); err != nil {
+		t.Fatalf("insert org: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "get-identity-"+uuid.NewString()+"@example.com", "Get Identity Test User"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO agents (id, org_id, owner_id, name, slug, type, status)
+		VALUES ($1, $2, $3, $4, $5, 'CODER', 'ACTIVE'), ($6, $2, $3, $7, $8, 'CODER', 'ACTIVE')
+	`, agentID, orgID, userID, "Get Identity Test Agent", agentSlug, otherAgentID, "Other Get Identity Test Agent", otherAgentSlug); err != nil {
+		t.Fatalf("insert agents: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO context_chunks (id, project_id, agent_id, org_id, scope, chunk_type, query_key, title, content, source_lines, gotchas, related)
+		VALUES
+			($1, NULL, $2, NULL, 'AGENT', 'IDENTITY', 'agent-identity', 'Agent Identity', $3::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb),
+			($4, NULL, $2, NULL, 'AGENT', 'MEMORY', 'agent-memory', 'Agent Memory', $5::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb),
+			($6, NULL, $7, NULL, 'AGENT', 'IDENTITY', 'other-agent-identity', 'Other Agent Identity', $8::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb),
+			($9, NULL, NULL, $10, 'ORG', 'IDENTITY', 'org-identity', 'Org Identity', $11::jsonb, 'null'::jsonb, '[]'::jsonb, '[]'::jsonb)
+	`, identityID, agentID, string(encodeContent("agent identity")), memoryID, string(encodeContent("agent memory")), otherIdentityID, otherAgentID, string(encodeContent("other identity")), orgIdentityID, orgID, string(encodeContent("org identity"))); err != nil {
+		t.Fatalf("insert chunks: %v", err)
+	}
+
+	result, err := tools.GetIdentity(ctx, GetIdentityInput{AgentID: agentID})
+	if err != nil {
+		t.Fatalf("GetIdentity() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("total = %d, want 1", result.Total)
+	}
+	if len(result.Chunks) != 1 {
+		t.Fatalf("got %d chunks, want 1", len(result.Chunks))
+	}
+	chunk := result.Chunks[0]
+	if chunk.ID != identityID || chunk.QueryKey != "agent-identity" || chunk.ChunkType != "IDENTITY" || chunk.Scope != "AGENT" {
+		t.Fatalf("unexpected identity chunk: %+v", chunk)
+	}
+
+	outsideOrgResult, err := tools.GetIdentity(ctx, GetIdentityInput{AgentID: agentID, OrgID: uuid.NewString()})
+	if err != nil {
+		t.Fatalf("GetIdentity() with org boundary error = %v", err)
+	}
+	if outsideOrgResult.Total != 0 || len(outsideOrgResult.Chunks) != 0 {
+		t.Fatalf("outside org got total=%d len=%d, want zero", outsideOrgResult.Total, len(outsideOrgResult.Chunks))
+	}
+}
+
+func TestGetIdentityRequiresAgentID(t *testing.T) {
+	t.Parallel()
+
+	tools := &Tools{}
+	_, err := tools.GetIdentity(context.Background(), GetIdentityInput{})
+	if err == nil {
+		t.Fatal("GetIdentity() error = nil, want agent_id required error")
+	}
+}
+
 func TestWriteChunk_InjectAudienceOverride(t *testing.T) {
 	t.Parallel()
 
 	in := WriteChunkInput{
-		Type:         "KNOWLEDGE",
-		QueryKey:     "test-key",
-		Title:        "Test",
-		Content:      "Test content",
+		Type:           "KNOWLEDGE",
+		QueryKey:       "test-key",
+		Title:          "Test",
+		Content:        "Test content",
 		InjectAudience: nil,
 	}
 	if in.InjectAudience != nil {
@@ -1422,18 +1518,18 @@ func TestReadContextResultFromModel(t *testing.T) {
 	agentID := "agent-test"
 	orgID := "org-test"
 	chunk := models.ContextChunk{
-		ID:              "chunk-read-test",
-		ProjectID:       &projID,
-		Scope:           "AGENT",
-		AgentID:         &agentID,
-		OrgID:           &orgID,
-		InjectAudience:  models.DefaultInjectAudienceAll(),
-		ChunkType:       "MEMORY",
-		QueryKey:     "test-read-key",
-		Title:        "Test Read",
-		Content:      encodeContent("Read content"),
-		CreatedAt:    time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
-		UpdatedAt:    time.Date(2026, time.March, 2, 0, 0, 0, 0, time.UTC),
+		ID:             "chunk-read-test",
+		ProjectID:      &projID,
+		Scope:          "AGENT",
+		AgentID:        &agentID,
+		OrgID:          &orgID,
+		InjectAudience: models.DefaultInjectAudienceAll(),
+		ChunkType:      "MEMORY",
+		QueryKey:       "test-read-key",
+		Title:          "Test Read",
+		Content:        encodeContent("Read content"),
+		CreatedAt:      time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:      time.Date(2026, time.March, 2, 0, 0, 0, 0, time.UTC),
 	}
 
 	result := readContextResultFromModel(chunk, 5)
@@ -1704,7 +1800,6 @@ func TestReviewContextInput_Validation(t *testing.T) {
 		}
 	})
 
-
 }
 
 func TestDeleteContextInput_Validation(t *testing.T) {
@@ -1966,10 +2061,10 @@ func TestLoadAPIKeyScope_DispatchCoverage(t *testing.T) {
 			ScopeAllProjects:  false,
 			AllowedProjectIDs: []string{},
 			SearchFilters: models.AgentTypeFilterConfig{
-				IncludeScopes:           []string{"PROJECT", "ORG"},
-				ExcludeScopes:           []string{"AGENT"},
-				IncludeChunkTypes:       []string{"KNOWLEDGE"},
-				ExcludeChunkTypes:       []string{},
+				IncludeScopes:                  []string{"PROJECT", "ORG"},
+				ExcludeScopes:                  []string{"AGENT"},
+				IncludeChunkTypes:              []string{"KNOWLEDGE"},
+				ExcludeChunkTypes:              []string{},
 				OrgSearchRequiresExplicitScope: false,
 			},
 		}
