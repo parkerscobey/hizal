@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -212,6 +213,20 @@ func TestReadToolsDoNotRequireProjectID(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDispatchDeleteContextIgnoresProjectID(t *testing.T) {
+	t.Parallel()
+
+	srv := &Server{tools: &Tools{}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	_, err := srv.dispatchTool(context.Background(), req, "header-project-id", "delete_context", json.RawMessage(`{"project_id":"inaccessible-project-id"}`))
+	if err == nil {
+		t.Fatal("expected missing id error, got nil")
+	}
+	if !strings.Contains(err.Error(), "id is required") {
+		t.Fatalf("error = %q, want id validation without project access validation", err)
 	}
 }
 

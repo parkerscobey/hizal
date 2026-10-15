@@ -410,10 +410,10 @@ var toolList = []toolSchema{
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"project_id": map[string]interface{}{"type": "string", "description": "Project UUID containing this chunk"},
+				"project_id": map[string]interface{}{"type": "string", "description": "Optional and ignored; deletion is keyed on the globally unique chunk ID"},
 				"id":         map[string]interface{}{"type": "string"},
 			},
-			"required": []string{"project_id", "id"},
+			"required": []string{"id"},
 		},
 	},
 	{
@@ -1082,11 +1082,7 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, fmt.Errorf("invalid arguments: %w", err)
 		}
-		projectID, err := s.resolveOptionalProjectID(ctx, r, headerProjectID, in.ProjectID)
-		if err != nil {
-			return nil, err
-		}
-		return s.tools.DeleteContext(ctx, projectID, in.ID)
+		return s.tools.DeleteContext(ctx, "", in.ID)
 
 	case "start_session":
 		var in StartSessionInput
