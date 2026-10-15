@@ -1816,6 +1816,42 @@ func TestDeleteContextInput_Validation(t *testing.T) {
 	}
 }
 
+func TestDeleteContextToolSchema(t *testing.T) {
+	t.Parallel()
+
+	var deleteContext toolSchema
+	for _, tool := range toolList {
+		if tool.Name == "delete_context" {
+			deleteContext = tool
+			break
+		}
+	}
+	if deleteContext.Name == "" {
+		t.Fatal("delete_context tool schema not found")
+	}
+
+	required, ok := deleteContext.InputSchema["required"].([]string)
+	if !ok {
+		t.Fatal("delete_context required field malformed")
+	}
+	if !slices.Equal(required, []string{"id"}) {
+		t.Fatalf("delete_context required = %v, want [id]", required)
+	}
+
+	properties, ok := deleteContext.InputSchema["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("delete_context properties missing")
+	}
+	projectID, ok := properties["project_id"].(map[string]interface{})
+	if !ok {
+		t.Fatal("delete_context project_id property missing")
+	}
+	description, ok := projectID["description"].(string)
+	if !ok || !strings.Contains(description, "Optional and ignored") {
+		t.Fatalf("delete_context project_id description = %q, want optional-and-ignored guidance", description)
+	}
+}
+
 func TestGetContextVersionsInput_Defaults(t *testing.T) {
 	t.Parallel()
 
