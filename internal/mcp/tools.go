@@ -936,10 +936,17 @@ func (t *Tools) ReadContext(ctx context.Context, projectID string, in ReadContex
 		row = pool(t).QueryRow(ctx, query+`WHERE cc.id = $1`, in.ID)
 	} else {
 		if projectID == "" {
-			// No project_id: search across all projects (for AGENT/ORG scoped chunks)
+			// No project_id: search across all scopes (for AGENT/ORG scoped chunks).
 			row = pool(t).QueryRow(ctx, query+`WHERE cc.query_key = $1 LIMIT 1`, in.QueryKey)
 		} else {
-			row = pool(t).QueryRow(ctx, query+`WHERE cc.query_key = $1 AND cc.project_id = $2 LIMIT 1`, in.QueryKey, projectID)
+			// A project_id was supplied. It scopes PROJECT chunks, but an
+			// AGENT/ORG chunk has project_id NULL and is not addressable by any
+			// project — it must still be found by query_key (#138). Gating on
+			// `project_id = $2` alone excluded those chunks and returned
+			// "chunk not found" for a chunk that exists, indistinguishable from
+			// genuine absence. Include project-less chunks; their own scope rules
+			// (agent_id / org_id) are enforced by the caller's API-key scope.
+			row = pool(t).QueryRow(ctx, query+`WHERE cc.query_key = $1 AND (cc.project_id = $2 OR cc.project_id IS NULL) LIMIT 1`, in.QueryKey, projectID)
 		}
 	}
 
@@ -1101,13 +1108,25 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 		}
 	}
 
-	// Fetch current chunk — scope-aware: look up by ID only (chunk IDs are globally unique).
+	// Fetch current chunk — look up by ID only (chunk IDs are globally unique).
+	// Read the scope and project too, so a project_id that does not cover this
+	// chunk can be told apart from a genuinely absent id (#139): "out of scope"
+	// and "no such chunk" are different answers, and the old message conflated
+	// them.
 	row := pool(t).QueryRow(ctx, `
-		SELECT content FROM context_chunks WHERE id = $1
+		SELECT content, scope, project_id FROM context_chunks WHERE id = $1
 	`, in.ID)
 	var currentContentB []byte
-	if err := row.Scan(&currentContentB); err != nil {
+	var chunkScope string
+	var chunkProjectID *string
+	if err := row.Scan(&currentContentB, &chunkScope, &chunkProjectID); err != nil {
 		return nil, fmt.Errorf("chunk not found: %w", err)
+	}
+	// A supplied project_id gates only PROJECT-scoped chunks. An AGENT/ORG chunk
+	// has project_id NULL and is not addressable by a project, so it is never
+	// "out of scope" for a project — it belongs to an agent or an org (#139).
+	if projectID != "" && chunkScope == "PROJECT" && (chunkProjectID == nil || *chunkProjectID != projectID) {
+		return nil, fmt.Errorf("chunk %s is PROJECT-scoped to another project; it is not in project %s", in.ID, projectID)
 	}
 
 	// Get current version number
@@ -1191,21 +1210,18 @@ func (t *Tools) UpdateContext(ctx context.Context, projectID string, in UpdateCo
 		argIdx++
 	}
 
-	// WHERE args
+	// WHERE args. Chunk IDs are globally unique and the fetch above already
+	// trusts id alone, so the UPDATE must too: an AGENT/ORG chunk has project_id
+	// NULL and was never matched by `AND project_id = $M`, so update_context
+	// rejected an id a read tool just returned (#139) — and the version row was
+	// written before the update failed. The scope check above already rejected a
+	// genuinely out-of-scope PROJECT chunk with an honest message.
 	args = append(args, in.ID)
 	idIdx := argIdx
 	argIdx++
 
-	var query string
-	if projectID == "" {
-		query = fmt.Sprintf(`UPDATE context_chunks SET %s WHERE id = $%d RETURNING updated_at`,
-			joinClauses(setClauses), idIdx)
-	} else {
-		args = append(args, projectID)
-		projIdx := argIdx
-		query = fmt.Sprintf(`UPDATE context_chunks SET %s WHERE id = $%d AND project_id = $%d RETURNING updated_at`,
-			joinClauses(setClauses), idIdx, projIdx)
-	}
+	query := fmt.Sprintf(`UPDATE context_chunks SET %s WHERE id = $%d RETURNING updated_at`,
+		joinClauses(setClauses), idIdx)
 
 	var updatedAt time.Time
 	if err := pool(t).QueryRow(ctx, query, args...).Scan(&updatedAt); err != nil {
