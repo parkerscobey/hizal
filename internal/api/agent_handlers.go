@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/XferOps/hizal/internal/audit"
+	"github.com/XferOps/hizal/internal/mcp"
 	"github.com/XferOps/hizal/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -447,7 +448,12 @@ func (h *AgentHandlers) AddProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify owner has access to this project (org owner bypass is handled inside).
+	// Verify the owner may attach this agent to this project. Two paths:
+	//  (1) the owner's org OWNS the project (org owner, or an explicit project
+	//      membership) — the pre-existing rule; or
+	//  (2) the AGENT's home org holds a live grant on the project (#141,
+	//      cross-org sharing). A grant is per-project and revocable; this check
+	//      is live, so a revoked grant fails the next attach closed.
 	var project models.Project
 	err = h.pool.QueryRow(r.Context(), `SELECT id, org_id FROM projects WHERE id = $1`, body.ProjectID).Scan(&project.ID, &project.OrgID)
 	if err != nil {
@@ -455,22 +461,34 @@ func (h *AgentHandlers) AddProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ownerOrgRole string
-	_ = h.pool.QueryRow(r.Context(),
-		`SELECT role FROM org_memberships WHERE user_id = $1 AND org_id = $2`, ownerID, project.OrgID,
-	).Scan(&ownerOrgRole)
+	// Path (2): the agent's home org holds a grant on the project.
+	agentOrg, _ := mcp.AgentHomeOrg(r.Context(), h.pool, agentID)
+	granted := false
+	if agentOrg != "" && agentOrg != project.OrgID {
+		if ok, gerr := mcp.OrgHoldsGrantForProject(r.Context(), h.pool, agentOrg, body.ProjectID); gerr == nil && ok {
+			granted = true
+		}
+	}
 
-	if ownerOrgRole != "owner" {
-		// Non-owner must have an explicit project membership.
-		var pmRole string
-		err = h.pool.QueryRow(r.Context(),
-			`SELECT role FROM project_memberships WHERE user_id = $1 AND project_id = $2`,
-			ownerID, body.ProjectID,
-		).Scan(&pmRole)
-		if err != nil {
-			writeError(w, http.StatusForbidden, "OWNER_NOT_PROJECT_MEMBER",
-				"agent's owner does not have access to this project")
-			return
+	if !granted {
+		// Path (1): the owner has access to the project (org owner bypass handled inside).
+		var ownerOrgRole string
+		_ = h.pool.QueryRow(r.Context(),
+			`SELECT role FROM org_memberships WHERE user_id = $1 AND org_id = $2`, ownerID, project.OrgID,
+		).Scan(&ownerOrgRole)
+
+		if ownerOrgRole != "owner" {
+			// Non-owner must have an explicit project membership.
+			var pmRole string
+			err = h.pool.QueryRow(r.Context(),
+				`SELECT role FROM project_memberships WHERE user_id = $1 AND project_id = $2`,
+				ownerID, body.ProjectID,
+			).Scan(&pmRole)
+			if err != nil {
+				writeError(w, http.StatusForbidden, "OWNER_NOT_PROJECT_MEMBER",
+					"agent's owner does not have access to this project")
+				return
+			}
 		}
 	}
 

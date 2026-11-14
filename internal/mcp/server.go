@@ -802,6 +802,11 @@ func (s *Server) dispatchTool(ctx context.Context, r *http.Request, headerProjec
 		}
 		result, err := s.tools.WriteContext(ctx, projectID, in)
 		if err == nil && scope.AgentID != nil {
+			// #141: if the writer's home org differs from the project's, record an
+			// attributable audit row so a cross-org write is never anonymous.
+			if result != nil {
+				RecordCrossOrgWrite(ctx, s.tools.pool, scope.OrgID, *scope.AgentID, projectID, result.ID)
+			}
 			go s.tools.incrementSessionActivity(*scope.AgentID, scope.OrgID, true)
 		}
 		return result, err
