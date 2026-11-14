@@ -262,19 +262,22 @@ func totalInjectedSize(sets ...[]InjectedChunk) int {
 	return total
 }
 
-// validateStartProject ensures an explicitly passed project_id belongs to the
-// org (and to the agent, for agent keys) before a session row is created.
+// validateStartProject ensures an explicitly passed project_id is reachable
+// before a session row is created: the project's HOME org always owns it, and a
+// foreign org reaches it only through a live grant (#141). The check is LIVE —
+// it consults project_org_grants on every start, so a revoked grant fails the
+// next start closed rather than being cached.
+//
 // Returns a recovery-hinting error naming list_projects.
 func (t *Tools) validateStartProject(ctx context.Context, orgID, agentID string, projectID *string) error {
 	if projectID == nil || *projectID == "" {
 		return nil
 	}
-	var foundOrgID string
-	var name string
-	err := t.pool.QueryRow(ctx, `
-		SELECT org_id, name FROM projects WHERE id = $1
-	`, *projectID).Scan(&foundOrgID, &name)
-	if err != nil || foundOrgID != orgID {
+	role, err := projectReachableByOrg(ctx, t.pool, orgID, *projectID)
+	if err != nil {
+		return err
+	}
+	if role == GrantNone {
 		return fmt.Errorf("project_id %q is not accessible for this API key — call list_projects to see available project IDs, then retry start_session with a valid project_id (or omit project_id for an agent/org-only session)", *projectID)
 	}
 	if agentID != "" {
