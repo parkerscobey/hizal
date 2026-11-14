@@ -3,16 +3,13 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"sort"
 	"time"
 
 	"github.com/XferOps/hizal/internal/models"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ---- Input/Output types ----
@@ -133,9 +130,13 @@ type SessionChunkSummary struct {
 	Scope    string `json:"scope"`
 }
 
-// ActiveSessionError is returned by StartSession when the agent already has an
-// active session. It carries the existing session's ID and expiry so the caller
-// can immediately resume or inspect rather than guessing what went wrong.
+// ActiveSessionError is retained for compatibility. Before #142, StartSession
+// returned it when the agent already had an active session (enforced by a
+// unique index). Multi-session removed that index, so a second start_session
+// now succeeds and this error is no longer produced by StartSession. The type
+// and the MCP dispatcher's handler for it are kept so the public error shape and
+// any external callers that type-assert on it keep working; it is reserved, not
+// raised — nothing produces it today.
 type ActiveSessionError struct {
 	SessionID string    `json:"session_id"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -594,26 +595,12 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		RETURNING id
 	`, in.AgentID, in.ProjectID, orgID, lc.ID, expiresAt).Scan(&sessionID)
 	if err != nil {
-		// Unique constraint violation means the agent already has an active session.
-		// Return structured info so the caller can resume or inspect instead of
-		// seeing an opaque internal error.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			var existingID string
-			var existingExpiry time.Time
-			qerr := t.pool.QueryRow(ctx, `
-				SELECT id, expires_at FROM sessions
-				WHERE agent_id = $1 AND status = 'active'
-				LIMIT 1
-			`, in.AgentID).Scan(&existingID, &existingExpiry)
-			if qerr == nil {
-				return nil, &ActiveSessionError{
-					SessionID: existingID,
-					ExpiresAt: existingExpiry,
-					Message:   "agent already has an active session — call resume_session to extend TTL or get_active_session to retrieve session info",
-				}
-			}
-		}
+		// #142: an agent may hold several active sessions, so a second
+		// start_session is expected to succeed — there is no longer a unique
+		// constraint to violate. The old ActiveSessionError path (keyed on
+		// UniqueViolation) was removed with the index
+		// (migration 030_multi_session); keeping it would describe a constraint
+		// that no longer exists.
 		return nil, fmt.Errorf("start_session: insert failed: %w", err)
 	}
 
@@ -1021,21 +1008,91 @@ func (t *Tools) EndSession(ctx context.Context, orgID string, in EndSessionInput
 // GetActiveSessionResult is returned by GetActiveSession.
 type GetActiveSessionResult struct {
 	SessionID     *string  `json:"session_id"`
-	Status        string   `json:"status"` // "active" | "none"
+	Status        string   `json:"status"` // "active" | "none" | "ambiguous"
 	LifecycleSlug *string  `json:"lifecycle_slug,omitempty"`
 	FocusTask     *string  `json:"focus_task,omitempty"`
 	ExpiresAt     *string  `json:"expires_at,omitempty"`
 	ChunksWritten int      `json:"chunks_written"`
 	ResumeCount   int      `json:"resume_count"`
 	InjectSet     []string `json:"inject_set,omitempty"`
-	Message       string   `json:"message"`
+	// OpenSessions is populated only when Status == "ambiguous" (N>1 active):
+	// the caller must disambiguate, so we return the list rather than pick one.
+	OpenSessions []OpenSessionSummary `json:"open_sessions,omitempty"`
+	Message      string               `json:"message"`
+}
+
+// OpenSessionSummary is one entry in GetActiveSessionResult.OpenSessions: enough
+// for the caller to choose which session it meant.
+//
+// (Declared beside the result it belongs to; see GetActiveSession.)
+type OpenSessionSummary struct {
+	SessionID     string  `json:"session_id"`
+	LifecycleSlug string  `json:"lifecycle_slug"`
+	FocusTask     *string `json:"focus_task,omitempty"`
+	StartedAt     string  `json:"started_at"`
+	ExpiresAt     string  `json:"expires_at"`
 }
 
 // GetActiveSession returns the calling agent's current active session, derived
-// from the API key. No input required. Returns status="none" if no active session exists.
+// from the API key. No input required.
+//
+// Multi-session (#142): an agent may hold several active sessions. This tool
+// does NOT guess which one the caller meant — with exactly one active session it
+// returns it (unchanged, backwards compatible); with N>1 it returns
+// status="ambiguous" and the OPEN SESSIONS list, so the caller disambiguates by
+// session_id. Refuse on ambiguity rather than pick, the same rule the account
+// resolvers follow. A silent "most-recently-active" would hand the caller a
+// session it may not mean, which is the guess this project keeps removing.
 func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiveSessionResult, error) {
 	if agentID == "" {
 		return nil, fmt.Errorf("could not resolve agent from API key — ensure you are using an agent API key, not an org key")
+	}
+
+	// Count first: with N>1 we must not pick one. N==0 → none; N==1 → resolve it.
+	var activeCount int
+	if err := t.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM sessions WHERE agent_id = $1 AND status = 'active'`, agentID).Scan(&activeCount); err != nil {
+		return nil, fmt.Errorf("GetActiveSession count: %w", err)
+	}
+	if activeCount == 0 {
+		return &GetActiveSessionResult{
+			Status:  "none",
+			Message: "no active session — call start_session to begin one",
+		}, nil
+	}
+	if activeCount > 1 {
+		// Ambiguous — list them, do not pick.
+		rows, err := t.pool.Query(ctx, `
+			SELECT s.id, COALESCE(sl.slug, 'default'), s.focus_task, s.started_at, s.expires_at
+			FROM sessions s
+			LEFT JOIN session_lifecycles sl ON sl.id = s.lifecycle_id
+			WHERE s.agent_id = $1 AND s.status = 'active'
+			ORDER BY s.started_at DESC
+		`, agentID)
+		if err != nil {
+			return nil, fmt.Errorf("GetActiveSession list: %w", err)
+		}
+		defer rows.Close()
+		var open []OpenSessionSummary
+		for rows.Next() {
+			var o OpenSessionSummary
+			var startedAt, exp time.Time
+			if err := rows.Scan(&o.SessionID, &o.LifecycleSlug, &o.FocusTask, &startedAt, &exp); err != nil {
+				return nil, fmt.Errorf("GetActiveSession list scan: %w", err)
+			}
+			o.StartedAt = startedAt.Format(time.RFC3339)
+			o.ExpiresAt = exp.Format(time.RFC3339)
+			open = append(open, o)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("GetActiveSession list: %w", err)
+		}
+		return &GetActiveSessionResult{
+			Status:       "ambiguous",
+			OpenSessions: open,
+			Message: fmt.Sprintf("%d active sessions — pass session_id to disambiguate "+
+				"(resume_session requires a session_id); this tool will not guess which one you meant", len(open)),
+		}, nil
 	}
 
 	var (
@@ -1048,6 +1105,7 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 		injectSetBytes []byte // inject_set is JSONB — scan to []byte then unmarshal
 	)
 
+	// Exactly one active session — return it (the pre-#142 behaviour).
 	// LEFT JOIN so sessions with a NULL or deleted lifecycle_id still resolve.
 	err := t.pool.QueryRow(ctx, `
 		SELECT s.id, COALESCE(sl.slug, 'default'), s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
@@ -1058,7 +1116,7 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 	`, agentID).Scan(&sessionID, &lifecycleSlug, &focusTask, &expiresAt, &chunksWritten, &resumeCount, &injectSetBytes)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			// Normal case: no active session exists.
+			// Raced with an end_session between the count and this read.
 			return &GetActiveSessionResult{
 				Status:  "none",
 				Message: "no active session — call start_session to begin one",
