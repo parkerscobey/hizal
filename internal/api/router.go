@@ -67,6 +67,7 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	grantH := NewProjectGrantHandlers(pool)
 	agentH := NewAgentHandlers(pool, auditLogger)
 	agentKeyH := NewAgentKeyHandlers(pool)
+	agentProvisionH := NewAgentProvisionHandlers(pool, auditLogger)
 	agentOnboardingH := NewAgentOnboardingHandlers(pool)
 	skillH := NewSkillHandlers(pool)
 	keyH := NewKeyHandlers(pool, auditLogger)
@@ -278,6 +279,12 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 
 	// Dynamic agent onboarding endpoint (requires API key auth)
 	r.With(APIKeyAuth(pool)).Get("/api/v1/agent-onboarding", agentOnboardingH.Get)
+
+	// Agent provisioning over API-key auth (#145): an autonomous agent can
+	// create a sibling agent and mint its key, scoped to the key's own org and
+	// gated by api_keys.can_create_agents. User-owned keys only.
+	r.With(APIKeyAuth(pool)).Post("/v1/agents", agentProvisionH.CreateAgent)
+	r.With(APIKeyAuth(pool)).Post("/v1/agents/{id}/keys", agentProvisionH.CreateAgentKey)
 	r.With(SkillAuth(pool)).Get("/api/v1/skills", skillH.List)
 	r.With(SkillAuth(pool)).Get("/api/v1/skills/{id}", skillH.Get)
 
