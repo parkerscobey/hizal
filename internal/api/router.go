@@ -283,8 +283,11 @@ func NewRouter(pool *pgxpool.Pool, embed *embeddings.Client) http.Handler {
 	// Agent provisioning over API-key auth (#145): an autonomous agent can
 	// create a sibling agent and mint its key, scoped to the key's own org and
 	// gated by api_keys.can_create_agents. User-owned keys only.
-	r.With(APIKeyAuth(pool)).Post("/v1/agents", agentProvisionH.CreateAgent)
-	r.With(APIKeyAuth(pool)).Post("/v1/agents/{id}/keys", agentProvisionH.CreateAgentKey)
+	//
+	// Prefix is /api/v1/ to match the other API-key-authed routes
+	// (/api/v1/agent-onboarding, /api/v1/skills). JWT routes use /v1/.
+	r.With(APIKeyAuth(pool)).Post("/api/v1/agents", agentProvisionH.CreateAgent)
+	r.With(APIKeyAuth(pool)).Post("/api/v1/agents/{id}/keys", agentProvisionH.CreateAgentKey)
 	r.With(SkillAuth(pool)).Get("/api/v1/skills", skillH.List)
 	r.With(SkillAuth(pool)).Get("/api/v1/skills/{id}", skillH.Get)
 

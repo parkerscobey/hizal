@@ -75,8 +75,8 @@ func newProvisionFixture(t *testing.T, ctx context.Context, canCreate bool) *pro
 	h := NewAgentProvisionHandlers(pool, nil)
 	r := chi.NewRouter()
 	r.Use(APIKeyAuth(pool))
-	r.Post("/v1/agents", h.CreateAgent)
-	r.Post("/v1/agents/{id}/keys", h.CreateAgentKey)
+	r.Post("/api/v1/agents", h.CreateAgent)
+	r.Post("/api/v1/agents/{id}/keys", h.CreateAgentKey)
 
 	return &provisionFixture{pool: pool, router: r, orgID: orgID, userID: userID, keyPlain: plaintext}
 }
@@ -108,7 +108,7 @@ func TestProvisionAgentRequiresScope(t *testing.T) {
 	ctx := context.Background()
 	f := newProvisionFixture(t, ctx, false) // can_create_agents = FALSE
 
-	rec, out := f.post(t, "/v1/agents", `{"name":"Blocked","slug":"blocked-`+uuid.NewString()[:8]+`"}`)
+	rec, out := f.post(t, "/api/v1/agents", `{"name":"Blocked","slug":"blocked-`+uuid.NewString()[:8]+`"}`)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("want 403 without scope, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -132,7 +132,7 @@ func TestProvisionAgentWithScope(t *testing.T) {
 	f := newProvisionFixture(t, ctx, true)
 
 	slug := "provisioned-" + uuid.NewString()[:8]
-	rec, out := f.post(t, "/v1/agents", `{"name":"Provisioned","slug":"`+slug+`","type":"CODER"}`)
+	rec, out := f.post(t, "/api/v1/agents", `{"name":"Provisioned","slug":"`+slug+`","type":"CODER"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -148,7 +148,7 @@ func TestProvisionAgentWithScope(t *testing.T) {
 	}
 
 	// Mint a key for the new agent.
-	rec2, out2 := f.post(t, "/v1/agents/"+agentID+"/keys", `{"name":"provisioned-key"}`)
+	rec2, out2 := f.post(t, "/api/v1/agents/"+agentID+"/keys", `{"name":"provisioned-key"}`)
 	if rec2.Code != http.StatusCreated {
 		t.Fatalf("want 201 minting key, got %d body=%s", rec2.Code, rec2.Body.String())
 	}
@@ -196,7 +196,7 @@ func TestProvisionAgentDeniedForAgentOwnedKey(t *testing.T) {
 		t.Fatalf("insert agent key: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/agents", bytes.NewBufferString(`{"name":"Sibling","slug":"sib-`+uuid.NewString()[:8]+`"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", bytes.NewBufferString(`{"name":"Sibling","slug":"sib-`+uuid.NewString()[:8]+`"}`))
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -218,6 +218,67 @@ func TestProvisionAgentDeniedForAgentOwnedKey(t *testing.T) {
 	}
 	if n != 1 { // only the parent
 		t.Fatalf("agent-owned key created an agent: n=%d (want 1, the parent)", n)
+	}
+}
+
+//  5. One-hop: a key MINTED by this path cannot itself provision. This is the
+//     recursion guard — provisioning must not grant the ability to provision.
+//     The minted key is AGENT-owned with can_create_agents FALSE, so a second
+//     hop is refused even though the parent key had the scope.
+func TestProvisionedKeyCannotProvision(t *testing.T) {
+	ctx := context.Background()
+	f := newProvisionFixture(t, ctx, true) // parent key HAS the scope
+
+	// Hop 1: parent creates an agent and mints its key.
+	slug := "hop1-" + uuid.NewString()[:8]
+	rec, out := f.post(t, "/api/v1/agents", `{"name":"Hop1","slug":"`+slug+`"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("hop1 create: want 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	agentID, _ := out["id"].(string)
+	rec2, out2 := f.post(t, "/api/v1/agents/"+agentID+"/keys", `{"name":"hop1-key"}`)
+	if rec2.Code != http.StatusCreated {
+		t.Fatalf("hop1 mint: want 201, got %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	minted, _ := out2["key"].(string)
+	if minted == "" {
+		t.Fatal("no minted key")
+	}
+
+	// Prove the minted key carries NO create-agents scope.
+	var canCreate bool
+	if err := f.pool.QueryRow(ctx,
+		`SELECT can_create_agents FROM api_keys WHERE key_hash=$1`, auth.HashKey(minted),
+	).Scan(&canCreate); err != nil {
+		t.Fatalf("minted key not found: %v", err)
+	}
+	if canCreate {
+		t.Fatalf("minted key inherited the create-agents scope — provisioning must not recurse")
+	}
+
+	// Hop 2: the minted key tries to provision. Must be refused.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents",
+		bytes.NewBufferString(`{"name":"Hop2","slug":"hop2-`+uuid.NewString()[:8]+`"}`))
+	req.Header.Set("Authorization", "Bearer "+minted)
+	req.Header.Set("Content-Type", "application/json")
+	rec3 := httptest.NewRecorder()
+	f.router.ServeHTTP(rec3, req)
+	if rec3.Code != http.StatusForbidden {
+		t.Fatalf("hop2 must be refused, got %d body=%s", rec3.Code, rec3.Body.String())
+	}
+	var out3 map[string]any
+	_ = json.Unmarshal(rec3.Body.Bytes(), &out3)
+	if errCode(out3) != "AGENT_KEY_CANNOT_PROVISION" {
+		t.Fatalf("want AGENT_KEY_CANNOT_PROVISION on hop2, got %v", errCode(out3))
+	}
+
+	// Prove exactly one agent exists (Hop1); Hop2 was not created.
+	var n int
+	if err := f.pool.QueryRow(ctx, `SELECT count(*) FROM agents WHERE org_id=$1`, f.orgID).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("provisioning recursed: n=%d (want 1)", n)
 	}
 }
 
@@ -247,7 +308,7 @@ func TestProvisionKeyCannotCrossOrgs(t *testing.T) {
 		t.Fatalf("insert foreign agent: %v", err)
 	}
 
-	rec, out := f.post(t, "/v1/agents/"+foreignAgent+"/keys", `{"name":"stolen"}`)
+	rec, out := f.post(t, "/api/v1/agents/"+foreignAgent+"/keys", `{"name":"stolen"}`)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("cross-org key mint must 404, got %d body=%s", rec.Code, rec.Body.String())
 	}
