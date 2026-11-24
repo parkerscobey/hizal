@@ -3,13 +3,16 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
 	"time"
 
 	"github.com/XferOps/hizal/internal/models"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ---- Input/Output types ----
@@ -130,13 +133,9 @@ type SessionChunkSummary struct {
 	Scope    string `json:"scope"`
 }
 
-// ActiveSessionError is retained for compatibility. Before #142, StartSession
-// returned it when the agent already had an active session (enforced by a
-// unique index). Multi-session removed that index, so a second start_session
-// now succeeds and this error is no longer produced by StartSession. The type
-// and the MCP dispatcher's handler for it are kept so the public error shape and
-// any external callers that type-assert on it keep working; it is reserved, not
-// raised — nothing produces it today.
+// ActiveSessionError is returned by StartSession when the agent already has an
+// active session. #142 removed the enforcement (and with it the error path);
+// 032 reverts #142, so this is raised again.
 type ActiveSessionError struct {
 	SessionID string    `json:"session_id"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -556,7 +555,9 @@ func (t *Tools) incrementSessionActivity(agentID, orgID string, isWrite bool) {
 
 // StartSession begins a new session for an agent.
 // Returns the session ID and all matching chunks for the agent's context window.
-// Fails if the agent already has an active session (use ResumeSession instead).
+// Fails with ActiveSessionError if the agent already has an active session (use
+// ResumeSession instead) — one active session per agent, per 010_sessions and
+// 032_single_session_again (which reverts the #142 multi-session experiment).
 func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, in StartSessionInput) (*StartSessionResult, error) {
 	if agentID == "" {
 		return nil, fmt.Errorf("could not resolve agent from API key — ensure you are using an agent API key, not an org key")
@@ -595,12 +596,36 @@ func (t *Tools) StartSession(ctx context.Context, orgID string, agentID string, 
 		RETURNING id
 	`, in.AgentID, in.ProjectID, orgID, lc.ID, expiresAt).Scan(&sessionID)
 	if err != nil {
-		// #142: an agent may hold several active sessions, so a second
-		// start_session is expected to succeed — there is no longer a unique
-		// constraint to violate. The old ActiveSessionError path (keyed on
-		// UniqueViolation) was removed with the index
-		// (migration 030_multi_session); keeping it would describe a constraint
-		// that no longer exists.
+		// One active session per agent is enforced by the partial unique index
+		// sessions_one_active_per_agent (010_sessions, re-asserted by
+		// 032_single_session_again). Translate that violation into the structured
+		// error carrying the EXISTING session's id + expires_at, so the caller
+		// can act on it (resume_session / get_active_session) instead of seeing
+		// an opaque constraint name.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			var existingID string
+			var existingExpiry time.Time
+			// ORDER BY started_at DESC: if a database somehow already holds
+			// several active sessions (rows from the 030 window, before the
+			// index is restored), name the most recent one rather than an
+			// arbitrary one.
+			qerr := t.pool.QueryRow(ctx, `
+				SELECT id, expires_at FROM sessions
+				WHERE agent_id = $1 AND status = 'active'
+				ORDER BY started_at DESC
+				LIMIT 1
+			`, in.AgentID).Scan(&existingID, &existingExpiry)
+			if qerr == nil {
+				return nil, &ActiveSessionError{
+					SessionID: existingID,
+					ExpiresAt: existingExpiry,
+					Message:   "agent already has an active session — call resume_session to extend TTL or get_active_session to retrieve session info",
+				}
+			}
+			// The index says otherwise (raced with a concurrent end_session) —
+			// fall through rather than fabricate an error with an empty id.
+		}
 		return nil, fmt.Errorf("start_session: insert failed: %w", err)
 	}
 
@@ -1015,8 +1040,10 @@ type GetActiveSessionResult struct {
 	ChunksWritten int      `json:"chunks_written"`
 	ResumeCount   int      `json:"resume_count"`
 	InjectSet     []string `json:"inject_set,omitempty"`
-	// OpenSessions is populated only when Status == "ambiguous" (N>1 active):
-	// the caller must disambiguate, so we return the list rather than pick one.
+	// OpenSessions is populated only when Status == "ambiguous" (N>1 active).
+	// That state is legacy: 032 re-asserted one active session per agent, so a
+	// live database should never be there — but rows from the 030 window can
+	// still be, so the list is kept rather than silently picking one.
 	OpenSessions []OpenSessionSummary `json:"open_sessions,omitempty"`
 	Message      string               `json:"message"`
 }
@@ -1036,13 +1063,13 @@ type OpenSessionSummary struct {
 // GetActiveSession returns the calling agent's current active session, derived
 // from the API key. No input required.
 //
-// Multi-session (#142): an agent may hold several active sessions. This tool
-// does NOT guess which one the caller meant — with exactly one active session it
-// returns it (unchanged, backwards compatible); with N>1 it returns
-// status="ambiguous" and the OPEN SESSIONS list, so the caller disambiguates by
-// session_id. Refuse on ambiguity rather than pick, the same rule the account
-// resolvers follow. A silent "most-recently-active" would hand the caller a
-// session it may not mean, which is the guess this project keeps removing.
+// Single-session is the rule (010_sessions, re-asserted by
+// 032_single_session_again after the #142 experiment): exactly one active
+// session per agent. With one active session it is returned; with none, status
+// "none". The N>1 branch is legacy, not a supported state — it exists because a
+// database that lived through the 030 window can still carry extra active rows,
+// and dropping the branch would make those rows invisible instead of fixing
+// them. It lists them and refuses to guess, so the caller can end the extras.
 func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiveSessionResult, error) {
 	if agentID == "" {
 		return nil, fmt.Errorf("could not resolve agent from API key — ensure you are using an agent API key, not an org key")
@@ -1061,7 +1088,7 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 		}, nil
 	}
 	if activeCount > 1 {
-		// Ambiguous — list them, do not pick.
+		// Legacy state (see the doc comment): list them, do not pick.
 		rows, err := t.pool.Query(ctx, `
 			SELECT s.id, COALESCE(sl.slug, 'default'), s.focus_task, s.started_at, s.expires_at
 			FROM sessions s
@@ -1105,7 +1132,7 @@ func (t *Tools) GetActiveSession(ctx context.Context, agentID string) (*GetActiv
 		injectSetBytes []byte // inject_set is JSONB — scan to []byte then unmarshal
 	)
 
-	// Exactly one active session — return it (the pre-#142 behaviour).
+	// Exactly one active session — the normal case.
 	// LEFT JOIN so sessions with a NULL or deleted lifecycle_id still resolve.
 	err := t.pool.QueryRow(ctx, `
 		SELECT s.id, COALESCE(sl.slug, 'default'), s.focus_task, s.expires_at, s.chunks_written, s.resume_count, s.inject_set
